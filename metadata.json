@@ -1,0 +1,5 @@
+{
+  "name": "HTML Studio",
+  "description": "A high-fidelity AI web builder interface that generates and previews pure HTML, CSS, and JavaScript code in real-time using Gemini 2.5 Flash.",
+  "requestFramePermissions": []
+}
