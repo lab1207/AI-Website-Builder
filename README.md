@@ -42,7 +42,8 @@ Refine it through conversation, preview changes in real time, and export the fin
 
 # 📸 Preview
 
-> Replace this section with your GIF or screenshots.
+<img width="1887" height="947" alt="Screenshot 2026-07-06 094620" src="https://github.com/user-attachments/assets/873979e9-b9f0-47bd-bd94-b2b1a4c7637e" />
+
 
 <p align="center">
 
