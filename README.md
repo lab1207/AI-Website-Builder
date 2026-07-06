@@ -1,20 +1,28 @@
 <div align="center">
-<img width="1200" height="475" alt="GHBanner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
+
+# 🚀 AI Website Builder
+
+### Generate complete HTML, CSS, and JavaScript websites from natural language using AI.
+
+<p>
+
+<img src="https://img.shields.io/badge/React-20232A?style=for-the-badge&logo=react&logoColor=61DAFB"/>
+<img src="https://img.shields.io/badge/TypeScript-3178C6?style=for-the-badge&logo=typescript&logoColor=white"/>
+<img src="https://img.shields.io/badge/Vite-646CFF?style=for-the-badge&logo=vite&logoColor=white"/>
+<img src="https://img.shields.io/badge/Gemini-AI-blue?style=for-the-badge"/>
+<img src="https://img.shields.io/badge/License-MIT-green?style=for-the-badge"/>
+
+</p>
+
+Fast • Live Preview • Export Projects • Open Source
+
+<p>
+
+<a href="#-features">Features</a> •
+<a href="#-preview">Preview</a> •
+<a href="#-how-it-works">How it Works</a> •
+<a href="#-installation">Installation</a>
+
+</p>
+
 </div>
-
-# Run and deploy your AI Studio app
-
-This contains everything you need to run your app locally.
-
-View your app in AI Studio: https://ai.studio/apps/drive/1-YdBRAagBU4GoOJVzHvsPp9U1Zc-CACc
-
-## Run Locally
-
-**Prerequisites:**  Node.js
-
-
-1. Install dependencies:
-   `npm install`
-2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
-3. Run the app:
-   `npm run dev`
