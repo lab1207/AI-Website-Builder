@@ -216,18 +216,3 @@ Contributions, issues, and feature requests are welcome.
 
 Feel free to open an issue or submit a pull request.
 
----
-
-# 📄 License
-
-This project is licensed under the MIT License.
-
----
-
-<div align="center">
-
-### ⭐ If this project helped you, consider giving it a star!
-
-It helps more developers discover the project and supports future development.
-
-</div>
