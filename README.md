@@ -1,6 +1,6 @@
 <div align="center">
 
-# 🚀 AI Website Builder
+# ⚡ AI Website Builder
 
 ### Generate complete HTML, CSS, and JavaScript websites from natural language with live preview and one-click export.
 
