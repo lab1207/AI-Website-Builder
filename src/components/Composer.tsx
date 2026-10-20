@@ -1,4 +1,4 @@
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import type { Attachment } from '../types';
 
 interface ComposerProps {
@@ -32,6 +32,63 @@ const Composer: React.FC<ComposerProps> = ({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const [attachments, setAttachments] = useState<Attachment[]>([]);
+  const [pasteNotice, setPasteNotice] = useState('');
+
+  const addImageFile = (file: File) => {
+    const reader = new FileReader();
+    reader.onload = (loadEvent) => {
+      const result = loadEvent.target?.result;
+      if (typeof result === 'string') {
+        setAttachments((current) => [
+          ...current,
+          { type: 'image', content: result, mimeType: file.type || 'image/png' },
+        ]);
+      }
+    };
+    reader.readAsDataURL(file);
+  };
+
+  /*
+   * Pasting an image anywhere in the window attaches it to the next prompt.
+   *
+   * The listener sits on the window rather than the textarea so a screenshot
+   * pastes even when the input is not focused, which is how people actually
+   * work: take a screenshot, press Ctrl+V, describe the change. Text pastes
+   * are left untouched, and the default is only prevented for images.
+   */
+  useEffect(() => {
+    const onPaste = (event: ClipboardEvent) => {
+      const items = event.clipboardData?.items;
+      if (!items) return;
+
+      const images: File[] = [];
+      for (const item of Array.from(items)) {
+        if (item.kind === 'file' && item.type.startsWith('image/')) {
+          const file = item.getAsFile();
+          if (file) images.push(file);
+        }
+      }
+      if (images.length === 0) return;
+
+      event.preventDefault();
+      images.forEach(addImageFile);
+      setPasteNotice(
+        images.length === 1
+          ? 'Image attached.'
+          : `${images.length} images attached.`,
+      );
+    };
+
+    window.addEventListener('paste', onPaste);
+    return () => window.removeEventListener('paste', onPaste);
+  }, []);
+
+  // The notice clears itself, so it never outstays its welcome.
+  useEffect(() => {
+    if (!pasteNotice) return;
+    const timer = window.setTimeout(() => setPasteNotice(''), 2600);
+    return () => window.clearTimeout(timer);
+  }, [pasteNotice]);
 
   const resize = () => {
     const element = textareaRef.current;
@@ -86,6 +143,16 @@ const Composer: React.FC<ComposerProps> = ({
           <p className="mt-2 text-[14.5px] text-ink-muted">
             Build a complete website with HTML, CSS and JavaScript.
           </p>
+        </div>
+      )}
+
+      {pasteNotice && (
+        <div
+          role="status"
+          className="mb-2 flex w-fit items-center gap-1.5 rounded-full border border-success/30 bg-success/10 px-2.5 py-1 text-[11.5px] font-medium text-success"
+        >
+          <i className="fa-solid fa-check text-[10px]" aria-hidden="true" />
+          {pasteNotice}
         </div>
       )}
 
@@ -163,7 +230,7 @@ const Composer: React.FC<ComposerProps> = ({
             onClick={() => fileInputRef.current?.click()}
             className="flex h-8 w-8 items-center justify-center rounded-lg text-ink-faint transition-colors hover:bg-surface-3 hover:text-ink"
             aria-label="Attach a reference image"
-            title="Attach a reference image"
+            title="Attach a reference image — or paste one from the clipboard"
           >
             <i className="fa-regular fa-image text-[13px]" aria-hidden="true" />
           </button>
@@ -217,7 +284,8 @@ const Composer: React.FC<ComposerProps> = ({
 
       {isHero && (
         <p className="mt-3 text-center text-[11.5px] text-ink-faint">
-          Your API key stays in this browser. Nothing is uploaded but your prompts.
+          Your API key stays in this browser. Paste a screenshot straight into
+          the box to use it as a reference.
         </p>
       )}
     </div>
