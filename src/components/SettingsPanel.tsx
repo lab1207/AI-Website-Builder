@@ -58,9 +58,17 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({
   const [loadingModels, setLoadingModels] = useState(true);
   const [keyDraft, setKeyDraft] = useState('');
   const [keyStatus, setKeyStatus] = useState<{ tone: 'ok' | 'warn'; text: string } | null>(null);
+  const [modelQuery, setModelQuery] = useState('');
   const id = useId();
 
   const definition = getProvider(provider);
+
+  const filteredModels = modelQuery.trim()
+    ? models.filter((model) =>
+        model.label.toLowerCase().includes(modelQuery.trim().toLowerCase()) ||
+        model.value.toLowerCase().includes(modelQuery.trim().toLowerCase()),
+      )
+    : models;
 
   useEffect(() => {
     let cancelled = false;
@@ -272,25 +280,83 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({
         </section>
 
         <section className="space-y-2">
-          <h3 className="text-[12px] font-semibold text-ink">Model</h3>
-          <label htmlFor={`${id}-model`} className="sr-only">
-            Model
-          </label>
-          <select
-            id={`${id}-model`}
-            value={settings.model}
-            onChange={(event) => handleChange('model', event.target.value)}
-            className="w-full rounded-xl border border-line bg-surface-2 px-3 py-2 text-[12.5px] text-ink outline-none focus:border-line-strong"
+          <div className="flex items-center justify-between">
+            <h3 className="text-[12px] font-semibold text-ink">Model</h3>
+            <button
+              onClick={() => {
+                setLoadingModels(true);
+                listProviderModels(provider, apiKey, customBaseUrl)
+                  .then((available) => setModels(available))
+                  .catch(() => setModels(definition.fallbackModels))
+                  .finally(() => setLoadingModels(false));
+              }}
+              className="btn btn-sm btn-ghost"
+              aria-label="Reload the model list"
+              title="Reload the model list"
+            >
+              <i
+                className={`fa-solid fa-rotate-right text-[11px] ${loadingModels ? 'animate-spin' : ''}`}
+                aria-hidden="true"
+              />
+              {loadingModels ? 'Loading…' : 'Reload'}
+            </button>
+          </div>
+
+          <div className="relative">
+            <i
+              className="fa-solid fa-magnifying-glass pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[11px] text-ink-faint"
+              aria-hidden="true"
+            />
+            <input
+              type="search"
+              value={modelQuery}
+              onChange={(event) => setModelQuery(event.target.value)}
+              placeholder="Search models…"
+              aria-label="Search models"
+              className="w-full rounded-xl border border-line bg-surface-2 py-2 pl-9 pr-3 text-[12.5px] text-ink outline-none placeholder:text-ink-faint focus:border-line-strong"
+            />
+          </div>
+
+          <div
+            role="listbox"
+            aria-label="Available models"
+            className="scroll-thin max-h-52 overflow-y-auto rounded-xl border border-line bg-surface-2 p-1"
           >
-            {loadingModels && <option>Loading models…</option>}
-            {models.map((model) => (
-              <option key={model.value} value={model.value}>
-                {model.label}
-              </option>
-            ))}
-          </select>
+            {loadingModels && (
+              <div className="flex items-center gap-2 px-3 py-2.5 text-[12px] text-ink-faint">
+                <i className="fa-solid fa-spinner fa-spin text-[11px]" aria-hidden="true" />
+                Loading models…
+              </div>
+            )}
+            {!loadingModels && filteredModels.length === 0 && (
+              <div className="px-3 py-2.5 text-[12px] text-ink-faint">
+                No models match "{modelQuery}".
+              </div>
+            )}
+            {!loadingModels &&
+              filteredModels.map((model) => (
+                <button
+                  key={model.value}
+                  role="option"
+                  aria-selected={settings.model === model.value}
+                  onClick={() => handleChange('model', model.value)}
+                  className={`flex w-full items-center justify-between gap-2 rounded-lg px-3 py-2 text-left text-[12.5px] transition-colors ${
+                    settings.model === model.value
+                      ? 'bg-accent-soft text-accent'
+                      : 'text-ink hover:bg-surface-3'
+                  }`}
+                >
+                  <span className="truncate">{model.label}</span>
+                  {settings.model === model.value && (
+                    <i className="fa-solid fa-check text-[10px]" aria-hidden="true" />
+                  )}
+                </button>
+              ))}
+          </div>
+
           <p className="text-[11px] leading-relaxed text-ink-faint">
-            Read from your key, so you only see what this account can use.
+            Read from your key, so you only see what this account can use. Type
+            to filter, or click reload to fetch again.
           </p>
         </section>
 

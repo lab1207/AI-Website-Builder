@@ -27,6 +27,8 @@ import {
   writeHistory,
 } from './lib/versionHistory';
 
+import LandingPage from './components/LandingPage';
+
 const generateId = () => Math.random().toString(36).substring(2, 15);
 
 const STORAGE_THEME = 'ai-website-builder:theme:v1';
@@ -71,6 +73,24 @@ const App: React.FC = () => {
 
   const [panel, setPanel] = useState<'none' | 'settings' | 'history' | 'publish'>('none');
   const [isPublishing, setIsPublishing] = useState(false);
+
+  // Show the marketing landing page on first visit, then the builder.
+  const [entered, setEntered] = useState<boolean>(() => {
+    try {
+      return window.localStorage.getItem('ai-website-builder:entered:v1') === '1';
+    } catch {
+      return false;
+    }
+  });
+
+  const enterBuilder = useCallback(() => {
+    setEntered(true);
+    try {
+      window.localStorage.setItem('ai-website-builder:entered:v1', '1');
+    } catch {
+      // Storage can be blocked; the builder still opens for this session.
+    }
+  }, []);
 
   const [runSettings, setRunSettings] = useState<RunSettings>({
     model: getProvider('gemini').defaultModel,
@@ -428,6 +448,12 @@ const App: React.FC = () => {
   const needsBuild = !projectTypeOption.previewable && hasFiles;
   const showChat = viewMode !== ViewMode.PREVIEW;
   const showPreview = viewMode !== ViewMode.CHAT;
+
+  // First visit: the marketing landing. Returning visitors drop straight into
+  // the builder; the landing is one click away from there.
+  if (!entered) {
+    return <LandingPage onEnter={enterBuilder} />;
+  }
 
   return (
     <div className="flex h-screen w-screen flex-col overflow-hidden bg-canvas font-sans text-ink">
