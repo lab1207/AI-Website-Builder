@@ -1,29 +1,84 @@
 @import 'tailwindcss';
 
 /*
- * Design tokens. The old build pulled a Tailwind config and three font
- * families from CDNs; everything is now bundled and shipped from the repo.
+ * Design tokens.
+ *
+ * Everything is defined as a plain CSS variable so the light and dark themes
+ * can swap at runtime, and the Tailwind theme maps onto those variables.
  */
-@theme {
-  --color-canvas: #0e0e10;
-  --color-surface: #17171a;
-  --color-surface-2: #1e1f22;
-  --color-surface-3: #26272b;
-  --color-line: #2f3135;
-  --color-line-strong: #3d4046;
-  --color-ink: #eceef1;
-  --color-ink-muted: #a6abb3;
-  --color-ink-faint: #767c85;
-  --color-accent: #4f8cff;
-  --color-accent-hover: #3b7af0;
-  --color-accent-soft: #4f8cff26;
-  --color-danger: #ff6b6b;
-  --color-success: #4ade80;
 
-  --font-sans: 'Inter Variable', ui-sans-serif, system-ui, -apple-system,
-    'Segoe UI', sans-serif;
-  --font-mono: 'Fira Code Variable', ui-monospace, 'SFMono-Regular', Menlo,
-    monospace;
+:root,
+[data-theme='light'] {
+  --canvas: #f4f4f6;
+  --surface: #ffffff;
+  --surface-2: #fafafa;
+  --surface-3: #f0f0f2;
+  --surface-hover: #ebebee;
+  --line: #e4e4e8;
+  --line-strong: #d4d4da;
+  --ink: #16161a;
+  --ink-muted: #5f636b;
+  --ink-faint: #91959d;
+  --accent: #2f6bff;
+  --accent-hover: #2457db;
+  --accent-soft: #2f6bff14;
+  --accent-ink: #ffffff;
+  --danger: #d92d20;
+  --success: #12805c;
+  --warning: #b25e09;
+  --shadow-sm: 0 1px 2px rgb(16 20 28 / 0.05);
+  --shadow-md: 0 6px 20px -6px rgb(16 20 28 / 0.12), 0 2px 6px -2px rgb(16 20 28 / 0.06);
+  --shadow-lg: 0 24px 60px -18px rgb(16 20 28 / 0.22);
+}
+
+[data-theme='dark'] {
+  --canvas: #0c0c0e;
+  --surface: #141416;
+  --surface-2: #1a1a1d;
+  --surface-3: #232327;
+  --surface-hover: #2a2a2f;
+  --line: #27272b;
+  --line-strong: #35353b;
+  --ink: #f3f3f5;
+  --ink-muted: #a0a3ab;
+  --ink-faint: #71747c;
+  --accent: #5b8bff;
+  --accent-hover: #7aa0ff;
+  --accent-soft: #5b8bff1f;
+  --accent-ink: #0c0c0e;
+  --danger: #ff6b6b;
+  --success: #4ade80;
+  --warning: #fbbf24;
+  --shadow-sm: 0 1px 2px rgb(0 0 0 / 0.4);
+  --shadow-md: 0 6px 20px -6px rgb(0 0 0 / 0.55), 0 2px 6px -2px rgb(0 0 0 / 0.4);
+  --shadow-lg: 0 24px 60px -18px rgb(0 0 0 / 0.7);
+}
+
+@theme inline {
+  --color-canvas: var(--canvas);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-surface-3: var(--surface-3);
+  --color-surface-hover: var(--surface-hover);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+  --color-ink: var(--ink);
+  --color-ink-muted: var(--ink-muted);
+  --color-ink-faint: var(--ink-faint);
+  --color-accent: var(--accent);
+  --color-accent-hover: var(--accent-hover);
+  --color-accent-soft: var(--accent-soft);
+  --color-accent-ink: var(--accent-ink);
+  --color-danger: var(--danger);
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+
+  --font-sans: 'Inter Variable', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-mono: 'Fira Code Variable', ui-monospace, 'SFMono-Regular', Menlo, monospace;
+
+  --radius-xl: 16px;
+  --radius-2xl: 20px;
+  --radius-3xl: 28px;
 }
 
 @layer base {
@@ -35,17 +90,34 @@
 
   body {
     margin: 0;
-    background-color: var(--color-canvas);
-    color: var(--color-ink);
+    background-color: var(--canvas);
+    color: var(--ink);
     font-family: var(--font-sans);
+    font-size: 14px;
     -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
   }
 
-  /* Visible focus for keyboard users, everywhere. */
+  button {
+    font: inherit;
+    color: inherit;
+  }
+
+  input,
+  textarea,
+  select {
+    font: inherit;
+    color: inherit;
+  }
+
   :focus-visible {
-    outline: 2px solid var(--color-accent);
+    outline: 2px solid var(--accent);
     outline-offset: 2px;
-    border-radius: 4px;
+    border-radius: 6px;
+  }
+
+  ::selection {
+    background: var(--accent-soft);
   }
 
   ::-webkit-scrollbar {
@@ -54,34 +126,57 @@
   }
 
   ::-webkit-scrollbar-track {
-    background: var(--color-canvas);
+    background: transparent;
   }
 
   ::-webkit-scrollbar-thumb {
-    background: var(--color-line-strong);
-    border-radius: 5px;
-    border: 2px solid var(--color-canvas);
+    background: var(--line-strong);
+    border-radius: 99px;
+    border: 3px solid transparent;
+    background-clip: content-box;
   }
 
   ::-webkit-scrollbar-thumb:hover {
-    background: #5e6067;
+    background: var(--ink-faint);
+    background-clip: content-box;
   }
 }
 
 @layer components {
-  /* Thin scrollbars inside the chat transcript. */
+  /* Soft, quiet scrollbars inside scroll regions. */
   .scroll-thin {
     scrollbar-width: thin;
-    scrollbar-color: var(--color-line-strong) transparent;
+    scrollbar-color: var(--line-strong) transparent;
+  }
+
+  .panel {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-xl);
+    box-shadow: var(--shadow-sm);
   }
 }
 
-/* Dropdown panels. The old build relied on tailwindcss-animate, which was
- * pulled from a CDN and is not part of Tailwind v4. */
+/* Small, quiet entrance used by the empty state and panels. */
+@keyframes rise-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-rise {
+  animation: rise-in 0.45s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
 @keyframes panel-in {
   from {
     opacity: 0;
-    transform: translateY(-4px) scale(0.985);
+    transform: translateY(-6px) scale(0.985);
   }
   to {
     opacity: 1;
@@ -91,6 +186,33 @@
 
 .animate-panel-in {
   animation: panel-in 0.16s ease-out both;
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.animate-fade-in {
+  animation: fade-in 0.2s ease-out both;
+}
+
+@keyframes pulse-soft {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.45;
+  }
+}
+
+.animate-pulse-soft {
+  animation: pulse-soft 1.6s ease-in-out infinite;
 }
 
 @media (prefers-reduced-motion: reduce) {

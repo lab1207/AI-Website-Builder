@@ -20,9 +20,18 @@ The first complete public release.
 - Thinking mode for deeper reasoning.
 - Image input, so a screenshot can be used as a reference.
 - An API key panel. Your key is stored in your browser and sent only to Google.
+- **Version history.** Every generation is saved with a snapshot of the files, and any version can be restored.
+- **Framework projects.** Generate plain HTML and CSS, React, Vue, or Next.js. Framework exports ship the scaffold they need to run: `package.json`, a Vite config, and an entry point.
+- **Tailwind CSS output.** Switch the model between plain CSS and Tailwind utilities.
+- **AI code explanations.** A button that asks the model to walk through the current project.
+- **Push to GitHub.** Send the project to a repository with a personal access token.
+- **Deploy to Vercel.** Publish the project and get a live URL.
+- **Import from Figma.** Pull the frames of a Figma file and use them as design references.
+- A light and a dark theme, with the choice remembered.
 
 ### Changed
 
+- **Rebuilt the interface.** A light, spacious workspace in the spirit of modern AI builders: a top bar with the project name, a centred "Describe your idea" empty state, rounded cards and soft shadows, a device-framed preview, and drawer panels for settings, history, and publishing.
 - Moved to a `src/` layout with a `lib/` folder for the pure logic.
 - Replaced the Tailwind CDN with a real Tailwind build, and the Google Fonts and Font Awesome CDNs with self-hosted copies. The app now makes no third-party requests.
 - Replaced the Google AI Studio import map, which pointed React and the build tooling at a CDN, with a normal Vite setup.

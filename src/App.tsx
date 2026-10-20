@@ -1,14 +1,55 @@
-import React, { useState, useCallback, useRef, useEffect } from 'react';
-import JSZip from 'jszip';
-import ChatInterface from './components/ChatInterface';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import ChatPanel from './components/ChatPanel';
 import PreviewPane from './components/PreviewPane';
-import RunSettingsPanel from './components/RunSettings';
-import { sendMessageToGemini, parseGeneratedFiles, DEFAULT_SYSTEM_INSTRUCTION, resetChat } from './services/geminiService';
+import SettingsPanel from './components/SettingsPanel';
+import HistoryPanel from './components/HistoryPanel';
+import PublishPanel from './components/PublishPanel';
+import AppHeader from './components/AppHeader';
+import {
+  sendMessageToGemini,
+  parseGeneratedFiles,
+  DEFAULT_SYSTEM_INSTRUCTION,
+  resetChat,
+} from './services/geminiService';
 import { Message, ViewMode, Attachment, FileMap, RunSettings, DeviceType } from './types';
 import { useApiKey } from './hooks/useApiKey';
 import { DEFAULT_MODEL } from './services/geminiService';
+import {
+  ProjectType,
+  Styling,
+  projectTypeInstruction,
+  scaffoldFor,
+  PROJECT_TYPES,
+} from './lib/projectTypes';
+import {
+  VersionSnapshot,
+  clearHistory,
+  readHistory,
+  writeHistory,
+} from './lib/versionHistory';
 
 const generateId = () => Math.random().toString(36).substring(2, 15);
+
+const STORAGE_THEME = 'ai-website-builder:theme:v1';
+const STORAGE_PROJECT = 'ai-website-builder:project-name:v1';
+
+function readStoredTheme(): 'light' | 'dark' {
+  try {
+    const stored = window.localStorage.getItem(STORAGE_THEME);
+    if (stored === 'light' || stored === 'dark') return stored;
+  } catch {
+    // Storage can be blocked.
+  }
+  return window.matchMedia?.('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+}
+
+function readStoredProjectName(): string {
+  try {
+    return window.localStorage.getItem(STORAGE_PROJECT) ?? 'Untitled project';
+  } catch {
+    return 'Untitled project';
+  }
+}
 
 const App: React.FC = () => {
   const [messages, setMessages] = useState<Message[]>([]);
@@ -16,18 +57,21 @@ const App: React.FC = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [currentFiles, setCurrentFiles] = useState<FileMap>({});
   const [viewMode, setViewMode] = useState<ViewMode>(ViewMode.SPLIT);
-  const [systemInstruction, setSystemInstruction] = useState(DEFAULT_SYSTEM_INSTRUCTION);
+  const [systemInstruction, setSystemInstruction] = useState('');
   const [isThinking, setIsThinking] = useState(false);
-  
-  // Annotation State
-  const [isAnnotating, setIsAnnotating] = useState(false);
-  const [pendingAnnotations, setPendingAnnotations] = useState<{x: number, y: number}[]>([]);
 
-  // Preview Device State (for context awareness)
+  const [isAnnotating, setIsAnnotating] = useState(false);
+  const [pendingAnnotations, setPendingAnnotations] = useState<Array<{ x: number; y: number }>>([]);
+
   const [previewDevice, setPreviewDevice] = useState<DeviceType>('desktop');
 
-  // Right Sidebar & Settings
-  const [isSettingsOpen, setIsSettingsOpen] = useState(true);
+  const [theme, setTheme] = useState<'light' | 'dark'>(readStoredTheme);
+  const [projectName, setProjectName] = useState<string>(readStoredProjectName);
+  const [projectType, setProjectType] = useState<ProjectType>('vanilla');
+  const [styling, setStyling] = useState<Styling>('vanilla');
+
+  const [panel, setPanel] = useState<'none' | 'settings' | 'history' | 'publish'>('none');
+
   const [runSettings, setRunSettings] = useState<RunSettings>({
     model: DEFAULT_MODEL,
     temperature: 1,
@@ -36,137 +80,185 @@ const App: React.FC = () => {
     maxOutputTokens: 8192,
   });
 
-  // The visitor's own API key, or the build-time fallback.
-  const { apiKey, hasKey, buildTimeAvailable, hasUserKey, saveKey, forgetKey } = useApiKey();
-  
-  // Create New Menu State
-  const [isCreateMenuOpen, setIsCreateMenuOpen] = useState(false);
-  const createMenuRef = useRef<HTMLDivElement>(null);
-  
+  const [versions, setVersions] = useState<VersionSnapshot[]>([]);
+
   const abortControllerRef = useRef<AbortController | null>(null);
   const projectInputRef = useRef<HTMLInputElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const { apiKey, hasKey, buildTimeAvailable, hasUserKey, saveKey, forgetKey } = useApiKey();
 
   useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (createMenuRef.current && !createMenuRef.current.contains(event.target as Node)) {
-        setIsCreateMenuOpen(false);
-      }
-    };
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
+    document.documentElement.dataset.theme = theme;
+    try {
+      window.localStorage.setItem(STORAGE_THEME, theme);
+    } catch {
+      // Not important enough to fail on.
+    }
+  }, [theme]);
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(STORAGE_PROJECT, projectName);
+    } catch {
+      // Not important enough to fail on.
+    }
+  }, [projectName]);
+
+  useEffect(() => {
+    setVersions(readHistory());
   }, []);
 
-  const handleSendMessage = useCallback(async (attachments: Attachment[] = [], overrideInput?: string) => {
-    let textToSend = overrideInput || input;
-    
-    // Add Context Context for AI (Annotations + Viewport)
-    let contextData = "";
-    
-    if (!overrideInput && pendingAnnotations.length > 0) {
-        contextData += pendingAnnotations.map(a => `[CONTEXT: User clicked at screen coordinates ${a.x}% horizontal, ${a.y}% vertical]`).join('\n');
-    }
-    
-    // Append viewport context so AI knows if user is looking at mobile/desktop
-    contextData += `\n[CONTEXT: User is currently viewing the app in ${previewDevice.toUpperCase()} mode.]`;
-    
-    if (contextData) {
-        textToSend = `${textToSend}\n\n${contextData}`;
-    }
+  const pushVersion = useCallback((files: FileMap, label: string, prompt?: string) => {
+    if (Object.keys(files).length === 0) return;
+    setVersions((current) => {
+      const snapshot: VersionSnapshot = {
+        id: generateId(),
+        label,
+        prompt,
+        files: { ...files },
+        createdAt: Date.now(),
+      };
+      const next = [snapshot, ...current].slice(0, 30);
+      writeHistory(next);
+      return next;
+    });
+  }, []);
 
-    if ((!textToSend.trim() && attachments.length === 0) || isLoading) return;
+  const handleSendMessage = useCallback(
+    async (attachments: Attachment[] = [], overrideInput?: string) => {
+      let textToSend = overrideInput || input;
 
-    const userMessage: Message = {
-      id: generateId(),
-      role: 'user',
-      content: textToSend, // Display the full text including context for transparency, or could strip it for UI
-      timestamp: Date.now(),
-      attachments: attachments
-    };
+      let contextData = '';
 
-    setMessages((prev) => [...prev, userMessage]);
-    if (!overrideInput) {
-        setInput('');
-        setPendingAnnotations([]); // Clear annotations after send
-    }
-    setIsLoading(true);
-
-    const assistantMessageId = generateId();
-    const startTime = Date.now();
-
-    setMessages((prev) => [
-      ...prev,
-      { id: assistantMessageId, role: 'assistant', content: '', timestamp: startTime }
-    ]);
-
-    // Create a new AbortController for this request
-    abortControllerRef.current = new AbortController();
-
-    try {
-      let accumulatedText = '';
-      
-      await sendMessageToGemini(
-        textToSend, 
-        attachments, 
-        messages, 
-        (textChunk) => {
-          accumulatedText = textChunk;
-          setMessages((prev) => 
-            prev.map((msg) => 
-              msg.id === assistantMessageId 
-                ? { ...msg, content: accumulatedText } 
-                : msg
-            )
-          );
-
-          const files = parseGeneratedFiles(accumulatedText);
-          if (Object.keys(files).length > 0) {
-              setCurrentFiles(files);
-          }
-        },
-        systemInstruction,
-        isThinking,
-        runSettings,
-        abortControllerRef.current.signal,
-        apiKey
-      );
-
-      // On complete, update latency
-      const endTime = Date.now();
-      const latency = endTime - startTime;
-      setMessages((prev) => 
-        prev.map((msg) => 
-            msg.id === assistantMessageId 
-            ? { ...msg, latency: latency }
-            : msg
-        )
-      );
-
-    } catch (error: any) {
-      if (error.name !== 'AbortError') {
-        console.error("Failed to send message", error);
-        
-        // Show specific error if available (e.g. missing API key)
-        const errorMessage = error.message && (error.message.includes('API Key') || error.message.includes('API key')) 
-            ? `Error: ${error.message}`
-            : 'Error: Failed to connect. Please check your API key or internet connection.';
-            
-        setMessages((prev) => [
-            ...prev,
-            { id: generateId(), role: 'assistant', content: errorMessage, timestamp: Date.now() }
-        ]);
+      if (!overrideInput && pendingAnnotations.length > 0) {
+        contextData += pendingAnnotations
+          .map(
+            (annotation) =>
+              `[CONTEXT: User clicked at screen coordinates ${annotation.x}% horizontal, ${annotation.y}% vertical]`,
+          )
+          .join('\n');
       }
-    } finally {
-      setIsLoading(false);
-      abortControllerRef.current = null;
-    }
-  }, [input, isLoading, messages, systemInstruction, isThinking, runSettings, pendingAnnotations, previewDevice, apiKey]);
+
+      contextData += `\n[CONTEXT: User is currently viewing the app in ${previewDevice.toUpperCase()} mode.]`;
+
+      if (contextData) {
+        textToSend = `${textToSend}\n\n${contextData}`;
+      }
+
+      if ((!textToSend.trim() && attachments.length === 0) || isLoading) return;
+
+      const userMessage: Message = {
+        id: generateId(),
+        role: 'user',
+        content: textToSend,
+        timestamp: Date.now(),
+        attachments,
+      };
+
+      setMessages((previous) => [...previous, userMessage]);
+      if (!overrideInput) {
+        setInput('');
+        setPendingAnnotations([]);
+      }
+      setIsLoading(true);
+
+      const assistantMessageId = generateId();
+      const startTime = Date.now();
+
+      setMessages((previous) => [
+        ...previous,
+        { id: assistantMessageId, role: 'assistant', content: '', timestamp: startTime },
+      ]);
+
+      abortControllerRef.current = new AbortController();
+
+      const instruction = [
+        DEFAULT_SYSTEM_INSTRUCTION,
+        projectTypeInstruction(projectType, styling),
+        systemInstruction.trim() ? `EXTRA INSTRUCTIONS:\n${systemInstruction.trim()}` : '',
+      ]
+        .filter(Boolean)
+        .join('\n\n');
+
+      try {
+        let accumulatedText = '';
+
+        await sendMessageToGemini(
+          textToSend,
+          attachments,
+          messages,
+          (chunk) => {
+            accumulatedText = chunk;
+            setMessages((previous) =>
+              previous.map((message) =>
+                message.id === assistantMessageId
+                  ? { ...message, content: accumulatedText }
+                  : message,
+              ),
+            );
+
+            const files = parseGeneratedFiles(accumulatedText);
+            if (Object.keys(files).length > 0) {
+              setCurrentFiles(files);
+            }
+          },
+          instruction,
+          isThinking,
+          runSettings,
+          abortControllerRef.current.signal,
+          apiKey,
+        );
+
+        const latency = Date.now() - startTime;
+        setMessages((previous) =>
+          previous.map((message) =>
+            message.id === assistantMessageId ? { ...message, latency } : message,
+          ),
+        );
+
+        const files = parseGeneratedFiles(accumulatedText);
+        if (Object.keys(files).length > 0) {
+          pushVersion(files, 'Generated', textToSend);
+        }
+      } catch (error) {
+        const failure = error as Error;
+        if (failure.name !== 'AbortError') {
+          const message =
+            failure.message && failure.message.toLowerCase().includes('api key')
+              ? `Error: ${failure.message}`
+              : 'Error: Could not reach the Gemini API. Check your key and your connection.';
+
+          setMessages((previous) => [
+            ...previous,
+            { id: generateId(), role: 'assistant', content: message, timestamp: Date.now() },
+          ]);
+        }
+      } finally {
+        setIsLoading(false);
+        abortControllerRef.current = null;
+      }
+    },
+    [
+      input,
+      isLoading,
+      messages,
+      systemInstruction,
+      isThinking,
+      runSettings,
+      pendingAnnotations,
+      previewDevice,
+      projectType,
+      styling,
+      apiKey,
+      pushVersion,
+    ],
+  );
 
   const handleStop = () => {
-    if (abortControllerRef.current) {
-        abortControllerRef.current.abort();
-        abortControllerRef.current = null;
-        setIsLoading(false);
-    }
+    abortControllerRef.current?.abort();
+    abortControllerRef.current = null;
+    setIsLoading(false);
   };
 
   const handleClearChat = () => {
@@ -174,269 +266,298 @@ const App: React.FC = () => {
     setCurrentFiles({});
     resetChat();
     setPendingAnnotations([]);
-    if (abortControllerRef.current) {
-        abortControllerRef.current.abort();
-    }
-    setIsCreateMenuOpen(false);
+    abortControllerRef.current?.abort();
   };
 
-  const handleImportClick = () => {
-    projectInputRef.current?.click();
-    setIsCreateMenuOpen(false);
-  };
-
-  const handleAutoFix = () => {
-      // Trigger a specific prompt for auto-fixing
-      handleSendMessage([], "Auto Fix: Please analyze the current code for any syntax errors, logical bugs, missing accessibility attributes, or responsive layout issues and fix them. Ensure the code is robust.");
-  };
-
-  const handleAnnotationSelect = (x: number, y: number) => {
-      setPendingAnnotations(prev => [...prev, {x, y}]);
-      setIsAnnotating(false); // Turn off annotation mode after selection to mimic "click tool -> select -> done" flow
-  };
-
-  const handleFileUpdate = (newFiles: FileMap) => {
-    setCurrentFiles(newFiles);
-  };
-
-  const handleProjectFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
+  const handleProjectFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
     if (!file) return;
 
     const newFiles: FileMap = {};
-    
+
     try {
-        if (file.name.endsWith('.zip')) {
-            const zip = new JSZip();
-            const loadedZip = await zip.loadAsync(file);
-            
-            for (const filename of Object.keys(loadedZip.files)) {
-                if (!loadedZip.files[filename].dir && !filename.startsWith('__MACOSX') && !filename.includes('.DS_Store')) {
-                const content = await loadedZip.files[filename].async('string');
-                newFiles[filename] = content;
-                }
-            }
-        } else if (file.name.endsWith('.html')) {
-            const content = await file.text();
-            // Use filename or default to index.html if it's the main file
-            newFiles[file.name] = content;
-            if (file.name !== 'index.html' && !newFiles['index.html']) {
-                 newFiles['index.html'] = content;
-            }
+      if (file.name.endsWith('.zip')) {
+        const { default: JSZip } = await import('jszip');
+        const zip = new JSZip();
+        const loaded = await zip.loadAsync(file);
+
+        for (const filename of Object.keys(loaded.files)) {
+          if (!loaded.files[filename].dir && !filename.startsWith('__MACOSX')) {
+            newFiles[filename] = await loaded.files[filename].async('string');
+          }
+        }
+      } else if (file.name.endsWith('.html')) {
+        const content = await file.text();
+        newFiles[file.name] = content;
+        if (file.name !== 'index.html' && !newFiles['index.html']) {
+          newFiles['index.html'] = content;
+        }
+      }
+
+      if (Object.keys(newFiles).length > 0) {
+        setCurrentFiles(newFiles);
+        pushVersion(newFiles, 'Imported');
+
+        let contextMessage = '';
+        for (const [name, content] of Object.entries(newFiles)) {
+          contextMessage += `__FILE: ${name}__\n${content}\n\n`;
         }
 
-        if (Object.keys(newFiles).length > 0) {
-            setCurrentFiles(newFiles);
-            
-            // Construct a context message to inform AI of the imported code
-            let contextMessage = "";
-            Object.entries(newFiles).forEach(([name, content]) => {
-                contextMessage += `__FILE: ${name}__\n${content}\n\n`;
-            });
-            
-            setMessages(prev => [
-                ...prev, 
-                { 
-                    id: generateId(), 
-                    role: 'user', 
-                    content: `I have imported the project files (${Object.keys(newFiles).join(', ')}). Use this as the current state.`, 
-                    timestamp: Date.now() 
-                },
-                {
-                    id: generateId(),
-                    role: 'assistant',
-                    content: contextMessage, 
-                    timestamp: Date.now(),
-                    latency: 0
-                }
-            ]);
-        }
-    } catch (error) {
-        console.error("Failed to import project:", error);
-        alert("Failed to import project file.");
+        setMessages((previous) => [
+          ...previous,
+          {
+            id: generateId(),
+            role: 'user',
+            content: `I have imported the project files (${Object.keys(newFiles).join(', ')}). Use this as the current state.`,
+            timestamp: Date.now(),
+          },
+          {
+            id: generateId(),
+            role: 'assistant',
+            content: contextMessage,
+            timestamp: Date.now(),
+            latency: 0,
+          },
+        ]);
+      }
+    } catch {
+      setMessages((previous) => [
+        ...previous,
+        {
+          id: generateId(),
+          role: 'assistant',
+          content: 'Error: Could not read that project file.',
+          timestamp: Date.now(),
+        },
+      ]);
     }
-    
+
     if (projectInputRef.current) projectInputRef.current.value = '';
   };
 
+  const handleAutoFix = () => {
+    handleSendMessage(
+      [],
+      'Review the current code for any syntax errors, broken links, missing accessibility attributes, or responsive layout problems, and fix them. Keep the existing design and structure.',
+    );
+  };
+
+  const handleExplain = () => {
+    handleSendMessage(
+      [],
+      'Explain the current code. Cover what each file does, how the pieces fit together, and anything a newcomer should be careful about. Do not rewrite the code.',
+    );
+  };
+
+  const handleRestoreVersion = (version: VersionSnapshot) => {
+    setCurrentFiles({ ...version.files });
+    setMessages((previous) => [
+      ...previous,
+      {
+        id: generateId(),
+        role: 'assistant',
+        content: `Restored the version from ${new Date(version.createdAt).toLocaleString()}.`,
+        timestamp: Date.now(),
+      },
+    ]);
+  };
+
+  const handleClearHistory = () => {
+    clearHistory();
+    setVersions([]);
+  };
+
+  const handleFigmaImport = (images: Array<{ name: string; dataUrl: string }>) => {
+    const attachments: Attachment[] = images.map((image) => ({
+      type: 'image',
+      content: image.dataUrl,
+      mimeType: 'image/png',
+    }));
+
+    setInput(
+      `Build a website that matches these Figma designs${images.length === 1 ? '' : 's'} exactly.`,
+    );
+    setMessages((previous) => [
+      ...previous,
+      {
+        id: generateId(),
+        role: 'user',
+        content: `Imported ${images.length} Figma frame${images.length === 1 ? '' : 's'}: ${images
+          .map((image) => image.name)
+          .join(', ')}. They are attached to the next message.`,
+        timestamp: Date.now(),
+        attachments,
+      },
+    ]);
+    setPanel('none');
+  };
+
+  // Framework projects need their scaffold files so the export is a project
+  // you can actually run, not just the files the model wrote.
+  const exportFiles = useMemo(
+    () => ({ ...scaffoldFor(projectType), ...currentFiles }),
+    [projectType, currentFiles],
+  );
+
+  const hasFiles = Object.keys(currentFiles).length > 0;
+  const projectTypeOption =
+    PROJECT_TYPES.find((option) => option.value === projectType) ?? PROJECT_TYPES[0];
+  const needsBuild = !projectTypeOption.previewable && hasFiles;
+  const showChat = viewMode !== ViewMode.PREVIEW;
+  const showPreview = viewMode !== ViewMode.CHAT;
+
   return (
-    <div className="flex h-screen w-screen bg-canvas overflow-hidden font-sans text-ink">
-      <main className="flex-1 flex flex-col h-full overflow-hidden relative">
-        {/* Minimal Header */}
-        <header className="h-14 flex items-center justify-between px-4 border-b border-line bg-canvas shrink-0 relative">
-          <div className="flex items-center gap-4" ref={createMenuRef}>
-             <button 
-                onClick={() => setIsCreateMenuOpen(!isCreateMenuOpen)}
-                aria-haspopup="menu"
-                aria-expanded={isCreateMenuOpen}
-                className="flex items-center gap-2 px-3 py-1.5 bg-accent text-white rounded-lg text-xs font-medium hover:bg-accent-hover transition-colors shadow-sm"
-             >
-                <i className="fa-solid fa-plus"></i>
-                <span className="hidden sm:inline">New</span>
-             </button>
+    <div className="flex h-screen w-screen flex-col overflow-hidden bg-canvas font-sans text-ink">
+      <AppHeader
+        projectName={projectName}
+        onProjectNameChange={setProjectName}
+        isGenerating={isLoading}
+        hasFiles={hasFiles}
+        theme={theme}
+        onToggleTheme={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+        onOpenSettings={() => setPanel(panel === 'settings' ? 'none' : 'settings')}
+        onOpenHistory={() => setPanel(panel === 'history' ? 'none' : 'history')}
+        onOpenPublish={() => setPanel(panel === 'publish' ? 'none' : 'publish')}
+        historyCount={versions.length}
+      />
 
-             {isCreateMenuOpen && (
-                 <div className="absolute top-12 left-4 z-50 w-56 bg-[#2d2e30] rounded-lg shadow-xl border border-line overflow-hidden animate-in fade-in slide-in-from-top-2 duration-200">
-                    <button onClick={handleClearChat} className="w-full text-left px-4 py-3 text-sm text-ink hover:bg-surface-3 transition-colors flex items-center gap-3">
-                        <i className="fa-regular fa-message text-accent"></i>
-                        <div>
-                            <div className="font-medium">New Prompt</div>
-                            <div className="text-[10px] text-ink-muted">Start a fresh chat session</div>
-                        </div>
-                    </button>
-                    <div className="h-px bg-line mx-2"></div>
-                    <button onClick={handleImportClick} className="w-full text-left px-4 py-3 text-sm text-ink hover:bg-surface-3 transition-colors flex items-center gap-3">
-                        <i className="fa-solid fa-file-import text-green-400"></i>
-                        <div>
-                            <div className="font-medium">Import Project</div>
-                            <div className="text-[10px] text-ink-muted">Upload .zip or .html</div>
-                        </div>
-                    </button>
-                     <button onClick={() => {}} className="w-full text-left px-4 py-3 text-sm text-ink-muted hover:bg-surface-3 transition-colors flex items-center gap-3 cursor-not-allowed opacity-50">
-                        <i className="fa-solid fa-image text-purple-400"></i>
-                        <div>
-                            <div className="font-medium">Image to App</div>
-                            <div className="text-[10px] text-ink-muted">Coming soon</div>
-                        </div>
-                    </button>
-                </div>
-             )}
-          </div>
-          
-          <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 pointer-events-none">
-             <span className="text-sm font-bold text-ink tracking-wide opacity-90">
-               AI Website Builder
-             </span>
-          </div>
-          
-          <div className="flex items-center gap-3">
-             {/* View Mode Switcher */}
-            <div className="flex bg-surface-2 p-0.5 rounded border border-line md:hidden">
-                <button 
-                onClick={() => setViewMode(ViewMode.CHAT)}
-                className={`px-3 py-1 text-xs font-medium rounded-sm transition-all ${viewMode === ViewMode.CHAT ? 'bg-surface-3 text-white' : 'text-ink-muted'}`}
-                >
-                Chat
-                </button>
-                <button 
-                onClick={() => setViewMode(ViewMode.PREVIEW)}
-                className={`px-3 py-1 text-xs font-medium rounded-sm transition-all ${viewMode === ViewMode.PREVIEW ? 'bg-surface-3 text-white' : 'text-ink-muted'}`}
-                >
-                Preview
-                </button>
-            </div>
-            
-            <input 
-                type="file" 
-                ref={projectInputRef} 
-                className="hidden" 
-                accept=".zip,.html"
-                onChange={handleProjectFileChange}
-            />
-            {/* Mobile-only import */}
-            <button 
-              onClick={handleImportClick}
-              className="md:hidden text-accent hover:text-accent-hover px-3 py-1.5 text-xs font-medium bg-blue-900/10 rounded transition-colors flex items-center gap-2"
-            >
-                 <i className="fa-solid fa-file-import"></i>
-            </button>
-            
-            <div className="w-px h-4 bg-line mx-1"></div>
-
-            <button 
-                onClick={() => setIsSettingsOpen(!isSettingsOpen)}
-                aria-label="Toggle run settings"
-                aria-expanded={isSettingsOpen}
-                className={`text-ink-muted hover:text-white transition-colors w-8 h-8 flex items-center justify-center rounded-full ${isSettingsOpen ? 'bg-surface-3' : ''}`}
-            >
-                 <i className="fa-solid fa-sliders"></i>
-            </button>
-          </div>
-        </header>
-
-        {!hasKey && (
-          <div
-            role="alert"
-            className="flex items-center justify-between gap-4 px-4 py-2.5 bg-accent-soft border-b border-accent/40 text-[12px] text-ink shrink-0"
-          >
-            <span className="flex items-center gap-2 min-w-0">
-              <i className="fa-solid fa-key text-accent" aria-hidden="true" />
-              <span className="truncate">
-                Add your Gemini API key to start generating. It stays in this browser.
-              </span>
+      {!hasKey && (
+        <div
+          role="alert"
+          className="flex shrink-0 items-center justify-between gap-4 border-b border-accent/20 bg-accent-soft px-4 py-2 text-[12.5px] text-ink"
+        >
+          <span className="flex min-w-0 items-center gap-2">
+            <i className="fa-solid fa-key text-accent" aria-hidden="true" />
+            <span className="truncate">
+              Add your Gemini API key to start building. It stays in this browser.
             </span>
-            <button
-              onClick={() => setIsSettingsOpen(true)}
-              className="shrink-0 rounded bg-accent hover:bg-accent-hover text-white px-3 py-1 text-[11px] font-medium transition-colors"
-            >
-              Add key
-            </button>
-          </div>
-        )}
+          </span>
+          <button
+            onClick={() => setPanel('settings')}
+            className="shrink-0 rounded-lg bg-accent px-3 py-1 text-[11.5px] font-semibold text-accent-ink transition-colors hover:bg-accent-hover"
+          >
+            Add key
+          </button>
+        </div>
+      )}
 
-        {/* Main Workspace */}
-        <div className="flex-1 flex overflow-hidden">
-          
-          {/* Chat Pane */}
-          <div className={`
-            flex-col transition-all duration-300 h-full border-r border-line bg-canvas
-            ${viewMode === ViewMode.CHAT ? 'flex w-full' : ''}
-            ${viewMode === ViewMode.SPLIT ? 'hidden md:flex md:w-[450px]' : ''}
-            ${viewMode === ViewMode.PREVIEW ? 'hidden' : ''}
-          `}>
-            <ChatInterface 
-              messages={messages} 
-              input={input} 
-              setInput={setInput} 
+      <div className="flex min-h-0 flex-1">
+        {showChat && (
+          <div
+            className={`flex h-full min-w-0 flex-col border-r border-line transition-[width] duration-300 ${
+              viewMode === ViewMode.SPLIT
+                ? 'w-full md:w-[400px] xl:w-[440px]'
+                : 'w-full'
+            }`}
+          >
+            <ChatPanel
+              messages={messages}
+              input={input}
+              setInput={setInput}
               onSend={(attachments) => handleSendMessage(attachments)}
               isLoading={isLoading}
-              systemInstruction={systemInstruction}
-              setSystemInstruction={setSystemInstruction}
               onStop={handleStop}
-              onClear={handleClearChat}
-              isThinking={isThinking}
-              setIsThinking={setIsThinking}
               isAnnotating={isAnnotating}
               setIsAnnotating={setIsAnnotating}
               pendingAnnotations={pendingAnnotations}
-              onRemoveAnnotation={(index) => setPendingAnnotations(prev => prev.filter((_, i) => i !== index))}
+              onRemoveAnnotation={(index) =>
+                setPendingAnnotations((previous) => previous.filter((_, i) => i !== index))
+              }
+              systemInstruction={systemInstruction}
+              setSystemInstruction={setSystemInstruction}
+              isThinking={isThinking}
+              setIsThinking={setIsThinking}
+              onClear={handleClearChat}
             />
           </div>
+        )}
 
-          {/* Preview Pane */}
-          <div className={`
-            flex-col transition-all duration-300 h-full bg-[#1e1e20]
-            ${viewMode === ViewMode.PREVIEW ? 'flex w-full' : ''}
-            ${viewMode === ViewMode.SPLIT ? 'hidden md:flex flex-1' : ''}
-            ${viewMode === ViewMode.CHAT ? 'hidden' : ''}
-          `}>
-             <PreviewPane 
-                files={currentFiles} 
-                isGenerating={isLoading} 
-                onAutoFix={handleAutoFix}
-                isAnnotating={isAnnotating}
-                onAnnotateSelect={handleAnnotationSelect}
-                onFileUpdate={handleFileUpdate}
-                previewDevice={previewDevice}
-                onDeviceChange={setPreviewDevice}
-             />
+        {showPreview && (
+          <div className="flex h-full min-w-0 flex-1 flex-col">
+            <PreviewPane
+              files={currentFiles}
+              isGenerating={isLoading}
+              onAutoFix={handleAutoFix}
+              onExplain={handleExplain}
+              isAnnotating={isAnnotating}
+              onAnnotateSelect={(x, y) => {
+                setPendingAnnotations((previous) => [...previous, { x, y }]);
+                setIsAnnotating(false);
+              }}
+              onFileUpdate={setCurrentFiles}
+              needsBuild={needsBuild}
+              projectLabel={projectTypeOption.label}
+              exportFiles={exportFiles}
+              previewDevice={previewDevice}
+              onDeviceChange={setPreviewDevice}
+            />
           </div>
+        )}
 
-           {/* Right Sidebar: Run Settings */}
-           <RunSettingsPanel
-              settings={runSettings}
-              setSettings={setRunSettings}
-              isOpen={isSettingsOpen}
-              onClose={() => setIsSettingsOpen(false)}
-              apiKey={apiKey}
-              buildTimeAvailable={buildTimeAvailable}
-              hasUserKey={hasUserKey}
-              onSaveKey={saveKey}
-              onForgetKey={forgetKey}
-           />
+        {panel === 'settings' && (
+          <SettingsPanel
+            settings={runSettings}
+            setSettings={setRunSettings}
+            projectType={projectType}
+            onProjectTypeChange={setProjectType}
+            styling={styling}
+            onStylingChange={setStyling}
+            apiKey={apiKey}
+            buildTimeAvailable={buildTimeAvailable}
+            hasUserKey={hasUserKey}
+            onSaveKey={saveKey}
+            onForgetKey={forgetKey}
+            onClose={() => setPanel('none')}
+          />
+        )}
 
-        </div>
-      </main>
+        {panel === 'history' && (
+          <HistoryPanel
+            versions={versions}
+            currentFiles={currentFiles}
+            onRestore={handleRestoreVersion}
+            onClear={handleClearHistory}
+            onClose={() => setPanel('none')}
+          />
+        )}
+
+        {panel === 'publish' && (
+          <PublishPanel
+            files={exportFiles}
+            projectName={projectName}
+            onClose={() => setPanel('none')}
+            onFigmaImport={handleFigmaImport}
+          />
+        )}
+      </div>
+
+      <input
+        type="file"
+        ref={projectInputRef}
+        className="hidden"
+        accept=".zip,.html"
+        onChange={handleProjectFileChange}
+      />
+      <input type="file" ref={fileInputRef} className="hidden" />
+
+      <div className="flex shrink-0 items-center justify-center gap-2 border-t border-line bg-surface px-3 py-1.5 md:hidden">
+        <button
+          onClick={() => setViewMode(ViewMode.CHAT)}
+          className={`rounded-lg px-3 py-1.5 text-[12px] font-medium transition-colors ${
+            viewMode === ViewMode.CHAT ? 'bg-surface-3 text-ink' : 'text-ink-muted'
+          }`}
+        >
+          Chat
+        </button>
+        <button
+          onClick={() => setViewMode(ViewMode.PREVIEW)}
+          className={`rounded-lg px-3 py-1.5 text-[12px] font-medium transition-colors ${
+            viewMode === ViewMode.PREVIEW ? 'bg-surface-3 text-ink' : 'text-ink-muted'
+          }`}
+        >
+          Preview
+        </button>
+      </div>
     </div>
   );
 };

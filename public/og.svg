@@ -1,70 +1,92 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630" font-family="Inter, Helvetica, Arial, sans-serif">
   <defs>
     <linearGradient id="accent" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0%" stop-color="#4f8cff" />
+      <stop offset="0%" stop-color="#2f6bff" />
       <stop offset="100%" stop-color="#7c5cff" />
     </linearGradient>
     <linearGradient id="panel" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0%" stop-color="#1a1b1f" />
-      <stop offset="100%" stop-color="#131417" />
+      <stop offset="0%" stop-color="#ffffff" />
+      <stop offset="100%" stop-color="#f7f7f9" />
     </linearGradient>
+    <filter id="soft" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="10" stdDeviation="18" flood-color="#101828" flood-opacity="0.10" />
+    </filter>
   </defs>
 
-  <rect width="1200" height="630" fill="#0e0e10" />
-  <circle cx="1010" cy="120" r="320" fill="#4f8cff" opacity="0.07" />
-  <circle cx="180" cy="560" r="280" fill="#7c5cff" opacity="0.06" />
+  <rect width="1200" height="630" fill="#f4f4f6" />
+  <circle cx="1050" cy="90" r="260" fill="#2f6bff" opacity="0.06" />
+  <circle cx="120" cy="580" r="240" fill="#7c5cff" opacity="0.05" />
 
-  <!-- Browser frame -->
-  <g transform="translate(64 96)">
-    <rect width="620" height="400" rx="18" fill="url(#panel)" stroke="#2f3135" stroke-width="2" />
-    <rect x="0" y="0" width="620" height="40" rx="18" fill="#1e1f22" />
-    <rect x="0" y="22" width="620" height="18" fill="#1e1f22" />
-    <line x1="0" y1="40" x2="620" y2="40" stroke="#2f3135" stroke-width="2" />
-    <circle cx="26" cy="20" r="5" fill="#3d4046" />
-    <circle cx="44" cy="20" r="5" fill="#3d4046" />
-    <circle cx="62" cy="20" r="5" fill="#3d4046" />
-    <rect x="92" y="11" width="330" height="18" rx="9" fill="#26272b" />
-    <text x="108" y="24" fill="#767c85" font-size="11" font-family="monospace">localhost:3000</text>
+  <!-- App window -->
+  <g transform="translate(56 92)" filter="url(#soft)">
+    <rect width="660" height="420" rx="18" fill="url(#panel)" stroke="#e4e4e8" stroke-width="1.5" />
 
-    <!-- Chat side -->
-    <rect x="0" y="40" width="250" height="360" fill="#131417" />
-    <line x1="250" y1="40" x2="250" y2="400" stroke="#2f3135" stroke-width="2" />
-    <rect x="24" y="72" width="200" height="52" rx="12" fill="#1e1f22" />
-    <rect x="40" y="92" width="120" height="8" rx="4" fill="#3d4046" />
-    <rect x="40" y="108" width="80" height="8" rx="4" fill="#2f3135" />
-    <rect x="24" y="300" width="200" height="46" rx="22" fill="#1e1f22" />
-    <rect x="44" y="318" width="100" height="9" rx="4.5" fill="#3d4046" />
-    <circle cx="206" cy="323" r="13" fill="url(#accent)" />
-    <path d="M206 316 L206 330 M200 323 L212 323" stroke="#ffffff" stroke-width="2" stroke-linecap="round" />
+    <!-- Top bar -->
+    <rect width="660" height="46" rx="18" fill="#ffffff" />
+    <rect x="0" y="28" width="660" height="18" fill="#ffffff" />
+    <line x1="0" y1="46" x2="660" y2="46" stroke="#e4e4e8" stroke-width="1.5" />
+    <rect x="16" y="13" width="20" height="20" rx="6" fill="url(#accent)" />
+    <path d="M26 18 L22 24 h4 l-2 6 8-8h-4l2-4z" fill="#ffffff" transform="translate(0,-1) scale(0.9) translate(1.4,1.4)" />
+    <rect x="46" y="19" width="86" height="8" rx="4" fill="#c9ccd3" />
+    <rect x="470" y="16" width="52" height="15" rx="7.5" fill="#f0f0f2" />
+    <rect x="532" y="14" width="58" height="19" rx="9" fill="url(#accent)" />
+    <rect x="600" y="16" width="44" height="15" rx="7.5" fill="#f0f0f2" />
 
-    <!-- Preview side -->
-    <rect x="278" y="72" width="316" height="70" rx="10" fill="#17171a" />
-    <rect x="298" y="92" width="150" height="10" rx="5" fill="url(#accent)" />
-    <rect x="298" y="112" width="240" height="8" rx="4" fill="#2f3135" />
-    <rect x="278" y="160" width="150" height="130" rx="10" fill="#17171a" />
-    <rect x="298" y="180" width="70" height="60" rx="6" fill="url(#accent)" opacity="0.85" />
-    <rect x="378" y="180" width="30" height="8" rx="4" fill="#2f3135" />
-    <rect x="378" y="196" width="30" height="8" rx="4" fill="#2f3135" />
-    <rect x="444" y="160" width="150" height="130" rx="10" fill="#17171a" />
-    <circle cx="519" cy="205" r="34" fill="none" stroke="url(#accent)" stroke-width="8" />
-    <path d="M519 171 A34 34 0 0 1 549 219" stroke="#7c5cff" stroke-width="8" stroke-linecap="round" fill="none" />
-    <rect x="462" y="256" width="114" height="8" rx="4" fill="#2f3135" />
+    <!-- Chat column -->
+    <rect x="0" y="46" width="236" height="374" fill="#fafafa" />
+    <line x1="236" y1="46" x2="236" y2="420" stroke="#e4e4e8" stroke-width="1.5" />
+
+    <rect x="24" y="86" width="188" height="30" rx="15" fill="#ffffff" stroke="#e4e4e8" />
+    <rect x="38" y="97" width="96" height="7" rx="3.5" fill="#c9ccd3" />
+
+    <rect x="24" y="132" width="188" height="52" rx="14" fill="#2f6bff" />
+    <rect x="38" y="148" width="140" height="7" rx="3.5" fill="#ffffff" opacity="0.92" />
+    <rect x="38" y="162" width="96" height="7" rx="3.5" fill="#ffffff" opacity="0.6" />
+
+    <rect x="24" y="198" width="30" height="30" rx="10" fill="#2f6bff" opacity="0.12" />
+    <rect x="64" y="204" width="112" height="9" rx="4.5" fill="#c9ccd3" />
+    <rect x="64" y="220" width="76" height="9" rx="4.5" fill="#dcdfe4" />
+
+    <!-- Composer -->
+    <rect x="16" y="336" width="204" height="68" rx="18" fill="#ffffff" stroke="#e4e4e8" />
+    <rect x="30" y="352" width="118" height="8" rx="4" fill="#dcdfe4" />
+    <circle cx="196" cy="380" r="11" fill="url(#accent)" />
+    <path d="M196 374 L196 386 M192 380 L200 380" stroke="#ffffff" stroke-width="2" stroke-linecap="round" />
+
+    <!-- Preview column -->
+    <rect x="236" y="46" width="424" height="374" fill="#f4f4f6" />
+    <rect x="256" y="66" width="384" height="332" rx="12" fill="#ffffff" stroke="#e4e4e8" />
+
+    <rect x="278" y="92" width="72" height="11" rx="5.5" fill="url(#accent)" />
+    <rect x="278" y="114" width="240" height="8" rx="4" fill="#dcdfe4" />
+    <rect x="278" y="130" width="180" height="8" rx="4" fill="#e6e8ec" />
+
+    <rect x="278" y="158" width="150" height="112" rx="10" fill="#f7f9ff" stroke="#e4e8ee" />
+    <rect x="296" y="178" width="80" height="12" rx="6" fill="url(#accent)" />
+    <rect x="296" y="200" width="110" height="7" rx="3.5" fill="#dcdfe4" />
+    <rect x="296" y="214" width="86" height="7" rx="3.5" fill="#e6e8ec" />
+    <rect x="296" y="238" width="54" height="16" rx="8" fill="url(#accent)" />
+
+    <rect x="448" y="158" width="150" height="112" rx="10" fill="#ffffff" stroke="#e4e8ee" />
+    <rect x="466" y="176" width="114" height="10" rx="5" fill="#dcdfe4" />
+    <rect x="466" y="196" width="80" height="7" rx="3.5" fill="#e6e8ec" />
+    <rect x="466" y="228" width="52" height="14" rx="7" fill="#eef2fe" />
   </g>
 
   <!-- Copy -->
-  <g transform="translate(724 150)">
-    <rect x="0" y="0" width="52" height="52" rx="13" fill="none" stroke="url(#accent)" stroke-width="3" />
-    <path d="M14 19h24M14 26h24M14 33h14" stroke="url(#accent)" stroke-width="3.5" stroke-linecap="round" />
+  <g transform="translate(760 152)">
+    <rect x="0" y="0" width="50" height="50" rx="13" fill="url(#accent)" />
+    <path d="M25 13 L19 27 h7 l-5 12 12-17h-7l5-9z" fill="#ffffff" />
 
-    <text x="0" y="122" fill="#eceef1" font-size="54" font-weight="700" letter-spacing="-1.5">AI Website</text>
-    <text x="0" y="180" fill="url(#accent)" font-size="54" font-weight="700" letter-spacing="-1.5">Builder</text>
+    <text x="0" y="112" fill="#16161a" font-size="50" font-weight="700" letter-spacing="-1.8">AI Website</text>
+    <text x="0" y="166" fill="#2f6bff" font-size="50" font-weight="700" letter-spacing="-1.8">Builder</text>
 
-    <text x="0" y="232" fill="#a6abb3" font-size="21" font-weight="500">Describe it. Generate it.</text>
-    <text x="0" y="264" fill="#a6abb3" font-size="21" font-weight="500">Preview it. Export it.</text>
+    <text x="0" y="220" fill="#5f636b" font-size="20" font-weight="500">Describe it. Get the code.</text>
+    <text x="0" y="250" fill="#5f636b" font-size="20" font-weight="500">Preview it. Publish it.</text>
 
-    <text x="0" y="330" fill="#767c85" font-size="17">HTML • CSS • JavaScript</text>
-    <text x="0" y="360" fill="#767c85" font-size="17">Live preview • ZIP export • Open source</text>
+    <text x="0" y="306" fill="#91959d" font-size="16">HTML · CSS · JavaScript · React · Vue · Next.js</text>
+    <text x="0" y="334" fill="#91959d" font-size="16">Live preview · Version history · One-click publish</text>
   </g>
 
-  <text x="64" y="580" fill="#767c85" font-size="16" font-family="monospace">github.com/lab1207/AI-Website-Builder</text>
+  <text x="56" y="574" fill="#91959d" font-size="15" font-family="monospace">github.com/lab1207/AI-Website-Builder</text>
 </svg>
