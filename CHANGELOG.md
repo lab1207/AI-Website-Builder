@@ -50,6 +50,12 @@ The first complete public release.
 
 - Continuous integration for typecheck, tests, and build.
 - One-command hosting configurations for Vercel, Cloudflare Pages, Netlify, and GitHub Pages.
+- A test that keeps the Netlify, Vercel, and Cloudflare header rules identical, and that catches a `_headers` file Netlify would misread.
 - Relicensed from MIT to GPL-3.0-or-later.
+
+### Dependencies
+
+- Upgraded to Tailwind CSS 4, Vite 8, TypeScript 7, `@vitejs/plugin-react` 6, and the `@google/genai` 2.x SDK.
+- Dropped the unused `uuid` dependency and the unused `Sidebar` component.
 
 [1.0.0]: https://github.com/lab1207/AI-Website-Builder/releases/tag/v1.0.0

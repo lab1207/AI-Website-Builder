@@ -12,6 +12,7 @@
 <img src="https://img.shields.io/badge/TailwindCSS-06B6D4?style=for-the-badge&logo=tailwindcss&logoColor=white"/>
 <img src="https://img.shields.io/badge/Google--Gemini-8E75B2?style=for-the-badge"/>
 <img src="https://img.shields.io/badge/license-GPL--3.0--or--later-e8b65f?style=for-the-badge"/>
+<a href="https://github.com/lab1207/AI-Website-Builder/stargazers"><img src="https://img.shields.io/github/stars/lab1207/AI-Website-Builder?color=e8b65f&label=stars&style=flat-square" alt="GitHub stars" /></a>
 
 </p>
 
