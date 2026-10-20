@@ -32,6 +32,16 @@ Fast • Live Preview • Prompt to Website • Open Source
 
 ---
 
+## 📸 Preview
+
+<img src="assets/screenshot.png" alt="The AI Website Builder with a generated landing page rendering in the live preview" />
+
+<p align="center">
+  <img src="assets/screenshot-empty.png" alt="The AI Website Builder on first load, with the prompt panel on the left and an empty preview on the right" />
+</p>
+
+---
+
 ## 💡 Why?
 
 Building a modern website from scratch takes time.
