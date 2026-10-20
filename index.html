@@ -1,78 +1,93 @@
-<!DOCTYPE html>
-<html lang="en">
+<!doctype html>
+<html lang="en" data-theme="dark">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Lovable Clone</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script>
-      tailwind.config = {
-        theme: {
-          extend: {
-            colors: {
-              lovable: {
-                dark: '#131314',      /* Main Background */
-                panel: '#1E1F20',     /* Surface/Sidebar */
-                border: '#444746',    /* Borders */
-                hover: '#28292a',     /* Hover state */
-                accent: '#0b57d0',    /* Google Blue */
-                accentHover: '#0842a0',
-                text: '#E3E3E3',      /* Primary Text */
-                textDim: '#C4C7C5'    /* Secondary Text */
-              }
-            },
-            fontFamily: {
-              sans: ['Inter', 'sans-serif'],
-              mono: ['Fira Code', 'monospace'],
-            }
-          }
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <title>AI Website Builder — Generate a website from a prompt</title>
+    <meta
+      name="description"
+      content="Describe a website in plain English and generate complete HTML, CSS, and JavaScript with live preview, conversational editing, and one-click ZIP export. Runs entirely in your browser."
+    />
+    <meta name="author" content="Vaibhav Hajare" />
+    <meta name="robots" content="index, follow" />
+    <meta name="theme-color" content="#0e0e10" />
+    <meta name="color-scheme" content="dark" />
+    <meta name="format-detection" content="telephone=no" />
+
+    <link rel="icon" type="image/svg+xml" href="./favicon.svg" />
+    <link rel="apple-touch-icon" href="./apple-touch-icon.png" />
+    <link rel="manifest" href="./site.webmanifest" />
+    <link rel="canonical" href="%SITE_URL%/" />
+
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="AI Website Builder" />
+    <meta property="og:title" content="AI Website Builder — Generate a website from a prompt" />
+    <meta
+      property="og:description"
+      content="Describe a website in plain English and generate complete HTML, CSS, and JavaScript with live preview, conversational editing, and one-click ZIP export."
+    />
+    <meta property="og:url" content="%SITE_URL%/" />
+    <meta property="og:image" content="%SITE_URL%/og.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta
+      property="og:image:alt"
+      content="The AI Website Builder interface: a chat panel on the left and a live preview on the right"
+    />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="AI Website Builder — Generate a website from a prompt" />
+    <meta
+      name="twitter:description"
+      content="Prompt to website, with live preview and one-click export. Runs entirely in your browser."
+    />
+    <meta name="twitter:image" content="%SITE_URL%/og.png" />
+
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "WebApplication",
+        "name": "AI Website Builder",
+        "description": "Generate complete HTML, CSS, and JavaScript websites from natural language, with live preview and one-click ZIP export.",
+        "url": "%SITE_URL%/",
+        "applicationCategory": "DeveloperApplication",
+        "keywords": "ai website builder, prompt to website, html css javascript generator, live preview, website generator, static site generator, gemini",
+        "operatingSystem": "Any",
+        "browserRequirements": "Requires JavaScript",
+        "isAccessibleForFree": true,
+        "offers": {
+          "@type": "Offer",
+          "price": "0",
+          "priceCurrency": "USD"
+        },
+        "license": "https://www.gnu.org/licenses/gpl-3.0.html",
+        "author": {
+          "@type": "Person",
+          "name": "Vaibhav Hajare",
+          "url": "https://github.com/lab1207"
         }
       }
     </script>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=Fira+Code:wght@400;500&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <style>
-      body {
-        background-color: #131314;
-        color: #E3E3E3;
-        font-family: 'Inter', sans-serif;
-      }
-      /* Custom Scrollbar */
-      ::-webkit-scrollbar {
-        width: 10px;
-        height: 10px;
-      }
-      ::-webkit-scrollbar-track {
-        background: #131314; 
-      }
-      ::-webkit-scrollbar-thumb {
-        background: #444746; 
-        border-radius: 5px;
-        border: 2px solid #131314;
-      }
-      ::-webkit-scrollbar-thumb:hover {
-        background: #5E5E5E; 
-      }
-    </style>
-  <script type="importmap">
-{
-  "imports": {
-    "react": "https://aistudiocdn.com/react@^19.2.0",
-    "react-dom/": "https://aistudiocdn.com/react-dom@^19.2.0/",
-    "react/": "https://aistudiocdn.com/react@^19.2.0/",
-    "@google/genai": "https://aistudiocdn.com/@google/genai@^1.30.0",
-    "uuid": "https://aistudiocdn.com/uuid@^13.0.0",
-    "jszip": "https://aistudiocdn.com/jszip@^3.10.1",
-    "@vitejs/plugin-react": "https://aistudiocdn.com/@vitejs/plugin-react@^5.1.1",
-    "vite": "https://aistudiocdn.com/vite@^7.2.4",
-    "path": "https://aistudiocdn.com/path@^0.12.7"
-  }
-}
-</script>
-<link rel="stylesheet" href="/index.css">
-</head>
+  </head>
   <body>
     <div id="root"></div>
-  <script type="module" src="/index.tsx"></script>
-</body>
+    <noscript>
+      <div
+        style="
+          max-width: 32rem;
+          margin: 20vh auto;
+          padding: 0 1.5rem;
+          color: #eceef1;
+          font-family: system-ui, sans-serif;
+          line-height: 1.6;
+        "
+      >
+        <h1 style="font-weight: 500">AI Website Builder</h1>
+        <p>
+          This builder runs entirely in your browser and needs JavaScript. Enable it and reload
+          to start building.
+        </p>
+      </div>
+    </noscript>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
 </html>

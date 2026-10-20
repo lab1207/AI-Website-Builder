@@ -1,24 +1,46 @@
 {
-  "name": "lovable-clone",
+  "name": "ai-website-builder",
   "private": true,
-  "version": "0.0.0",
+  "version": "1.0.0",
+  "description": "Generate complete HTML, CSS, and JavaScript websites from a prompt, with live preview and one-click ZIP export.",
   "type": "module",
+  "license": "GPL-3.0-or-later",
+  "author": "Vaibhav Hajare",
+  "homepage": "https://github.com/lab1207/AI-Website-Builder",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/lab1207/AI-Website-Builder.git"
+  },
+  "engines": {
+    "node": ">=22.12.0"
+  },
   "scripts": {
     "dev": "vite",
-    "build": "vite build",
-    "preview": "vite preview"
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "build": "npm run typecheck && vite build",
+    "preview": "vite preview",
+    "check": "npm run typecheck && npm run test && npm run build"
   },
   "dependencies": {
-    "react": "^19.2.0",
-    "react-dom": "^19.2.0",
+    "@fontsource-variable/fira-code": "^5.3.0",
+    "@fontsource-variable/inter": "^5.3.0",
+    "@fortawesome/fontawesome-free": "^7.3.1",
     "@google/genai": "^1.30.0",
-    "uuid": "^13.0.0",
-    "jszip": "^3.10.1"
+    "jszip": "^3.10.1",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0"
   },
   "devDependencies": {
+    "@tailwindcss/vite": "^4.3.3",
     "@types/node": "^22.14.0",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
     "@vitejs/plugin-react": "^5.0.0",
+    "tailwindcss": "^4.3.3",
     "typescript": "~5.8.2",
-    "vite": "^6.2.0"
+    "vite": "^6.2.0",
+    "vitest": "^5.0.5"
   }
 }

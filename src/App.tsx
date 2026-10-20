@@ -5,6 +5,8 @@ import PreviewPane from './components/PreviewPane';
 import RunSettingsPanel from './components/RunSettings';
 import { sendMessageToGemini, parseGeneratedFiles, DEFAULT_SYSTEM_INSTRUCTION, resetChat } from './services/geminiService';
 import { Message, ViewMode, Attachment, FileMap, RunSettings, DeviceType } from './types';
+import { useApiKey } from './hooks/useApiKey';
+import { DEFAULT_MODEL } from './services/geminiService';
 
 const generateId = () => Math.random().toString(36).substring(2, 15);
 
@@ -27,12 +29,15 @@ const App: React.FC = () => {
   // Right Sidebar & Settings
   const [isSettingsOpen, setIsSettingsOpen] = useState(true);
   const [runSettings, setRunSettings] = useState<RunSettings>({
-    model: 'gemini-2.5-flash',
+    model: DEFAULT_MODEL,
     temperature: 1,
     topP: 0.95,
     topK: 40,
-    maxOutputTokens: 8192
+    maxOutputTokens: 8192,
   });
+
+  // The visitor's own API key, or the build-time fallback.
+  const { apiKey, hasKey, buildTimeAvailable, hasUserKey, saveKey, forgetKey } = useApiKey();
   
   // Create New Menu State
   const [isCreateMenuOpen, setIsCreateMenuOpen] = useState(false);
@@ -121,7 +126,8 @@ const App: React.FC = () => {
         systemInstruction,
         isThinking,
         runSettings,
-        abortControllerRef.current.signal
+        abortControllerRef.current.signal,
+        apiKey
       );
 
       // On complete, update latency
@@ -153,7 +159,7 @@ const App: React.FC = () => {
       setIsLoading(false);
       abortControllerRef.current = null;
     }
-  }, [input, isLoading, messages, systemInstruction, isThinking, runSettings, pendingAnnotations, previewDevice]);
+  }, [input, isLoading, messages, systemInstruction, isThinking, runSettings, pendingAnnotations, previewDevice, apiKey]);
 
   const handleStop = () => {
     if (abortControllerRef.current) {
@@ -254,41 +260,43 @@ const App: React.FC = () => {
   };
 
   return (
-    <div className="flex h-screen w-screen bg-lovable-dark overflow-hidden font-sans text-lovable-text">
+    <div className="flex h-screen w-screen bg-canvas overflow-hidden font-sans text-ink">
       <main className="flex-1 flex flex-col h-full overflow-hidden relative">
         {/* Minimal Header */}
-        <header className="h-14 flex items-center justify-between px-4 border-b border-lovable-border bg-lovable-dark shrink-0 relative">
+        <header className="h-14 flex items-center justify-between px-4 border-b border-line bg-canvas shrink-0 relative">
           <div className="flex items-center gap-4" ref={createMenuRef}>
              <button 
                 onClick={() => setIsCreateMenuOpen(!isCreateMenuOpen)}
-                className="flex items-center gap-2 px-3 py-1.5 bg-lovable-accent text-white rounded-lg text-xs font-medium hover:bg-lovable-accentHover transition-colors shadow-sm"
+                aria-haspopup="menu"
+                aria-expanded={isCreateMenuOpen}
+                className="flex items-center gap-2 px-3 py-1.5 bg-accent text-white rounded-lg text-xs font-medium hover:bg-accent-hover transition-colors shadow-sm"
              >
                 <i className="fa-solid fa-plus"></i>
                 <span className="hidden sm:inline">New</span>
              </button>
 
              {isCreateMenuOpen && (
-                 <div className="absolute top-12 left-4 z-50 w-56 bg-[#2d2e30] rounded-lg shadow-xl border border-lovable-border overflow-hidden animate-in fade-in slide-in-from-top-2 duration-200">
-                    <button onClick={handleClearChat} className="w-full text-left px-4 py-3 text-sm text-lovable-text hover:bg-lovable-hover transition-colors flex items-center gap-3">
-                        <i className="fa-regular fa-message text-lovable-accent"></i>
+                 <div className="absolute top-12 left-4 z-50 w-56 bg-[#2d2e30] rounded-lg shadow-xl border border-line overflow-hidden animate-in fade-in slide-in-from-top-2 duration-200">
+                    <button onClick={handleClearChat} className="w-full text-left px-4 py-3 text-sm text-ink hover:bg-surface-3 transition-colors flex items-center gap-3">
+                        <i className="fa-regular fa-message text-accent"></i>
                         <div>
                             <div className="font-medium">New Prompt</div>
-                            <div className="text-[10px] text-lovable-textDim">Start a fresh chat session</div>
+                            <div className="text-[10px] text-ink-muted">Start a fresh chat session</div>
                         </div>
                     </button>
-                    <div className="h-px bg-lovable-border mx-2"></div>
-                    <button onClick={handleImportClick} className="w-full text-left px-4 py-3 text-sm text-lovable-text hover:bg-lovable-hover transition-colors flex items-center gap-3">
+                    <div className="h-px bg-line mx-2"></div>
+                    <button onClick={handleImportClick} className="w-full text-left px-4 py-3 text-sm text-ink hover:bg-surface-3 transition-colors flex items-center gap-3">
                         <i className="fa-solid fa-file-import text-green-400"></i>
                         <div>
                             <div className="font-medium">Import Project</div>
-                            <div className="text-[10px] text-lovable-textDim">Upload .zip or .html</div>
+                            <div className="text-[10px] text-ink-muted">Upload .zip or .html</div>
                         </div>
                     </button>
-                     <button onClick={() => {}} className="w-full text-left px-4 py-3 text-sm text-lovable-textDim hover:bg-lovable-hover transition-colors flex items-center gap-3 cursor-not-allowed opacity-50">
+                     <button onClick={() => {}} className="w-full text-left px-4 py-3 text-sm text-ink-muted hover:bg-surface-3 transition-colors flex items-center gap-3 cursor-not-allowed opacity-50">
                         <i className="fa-solid fa-image text-purple-400"></i>
                         <div>
                             <div className="font-medium">Image to App</div>
-                            <div className="text-[10px] text-lovable-textDim">Coming soon</div>
+                            <div className="text-[10px] text-ink-muted">Coming soon</div>
                         </div>
                     </button>
                 </div>
@@ -296,21 +304,23 @@ const App: React.FC = () => {
           </div>
           
           <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 pointer-events-none">
-             <span className="text-sm font-bold text-lovable-text tracking-wide opacity-90">LOVABLE</span>
+             <span className="text-sm font-bold text-ink tracking-wide opacity-90">
+               AI Website Builder
+             </span>
           </div>
           
           <div className="flex items-center gap-3">
              {/* View Mode Switcher */}
-            <div className="flex bg-lovable-panel p-0.5 rounded border border-lovable-border md:hidden">
+            <div className="flex bg-surface-2 p-0.5 rounded border border-line md:hidden">
                 <button 
                 onClick={() => setViewMode(ViewMode.CHAT)}
-                className={`px-3 py-1 text-xs font-medium rounded-sm transition-all ${viewMode === ViewMode.CHAT ? 'bg-lovable-hover text-white' : 'text-lovable-textDim'}`}
+                className={`px-3 py-1 text-xs font-medium rounded-sm transition-all ${viewMode === ViewMode.CHAT ? 'bg-surface-3 text-white' : 'text-ink-muted'}`}
                 >
                 Chat
                 </button>
                 <button 
                 onClick={() => setViewMode(ViewMode.PREVIEW)}
-                className={`px-3 py-1 text-xs font-medium rounded-sm transition-all ${viewMode === ViewMode.PREVIEW ? 'bg-lovable-hover text-white' : 'text-lovable-textDim'}`}
+                className={`px-3 py-1 text-xs font-medium rounded-sm transition-all ${viewMode === ViewMode.PREVIEW ? 'bg-surface-3 text-white' : 'text-ink-muted'}`}
                 >
                 Preview
                 </button>
@@ -326,28 +336,50 @@ const App: React.FC = () => {
             {/* Mobile-only import */}
             <button 
               onClick={handleImportClick}
-              className="md:hidden text-lovable-accent hover:text-lovable-accentHover px-3 py-1.5 text-xs font-medium bg-blue-900/10 rounded transition-colors flex items-center gap-2"
+              className="md:hidden text-accent hover:text-accent-hover px-3 py-1.5 text-xs font-medium bg-blue-900/10 rounded transition-colors flex items-center gap-2"
             >
                  <i className="fa-solid fa-file-import"></i>
             </button>
             
-            <div className="w-px h-4 bg-lovable-border mx-1"></div>
+            <div className="w-px h-4 bg-line mx-1"></div>
 
             <button 
                 onClick={() => setIsSettingsOpen(!isSettingsOpen)}
-                className={`text-lovable-textDim hover:text-white transition-colors w-8 h-8 flex items-center justify-center rounded-full ${isSettingsOpen ? 'bg-lovable-hover' : ''}`}
+                aria-label="Toggle run settings"
+                aria-expanded={isSettingsOpen}
+                className={`text-ink-muted hover:text-white transition-colors w-8 h-8 flex items-center justify-center rounded-full ${isSettingsOpen ? 'bg-surface-3' : ''}`}
             >
                  <i className="fa-solid fa-sliders"></i>
             </button>
           </div>
         </header>
 
+        {!hasKey && (
+          <div
+            role="alert"
+            className="flex items-center justify-between gap-4 px-4 py-2.5 bg-accent-soft border-b border-accent/40 text-[12px] text-ink shrink-0"
+          >
+            <span className="flex items-center gap-2 min-w-0">
+              <i className="fa-solid fa-key text-accent" aria-hidden="true" />
+              <span className="truncate">
+                Add your Gemini API key to start generating. It stays in this browser.
+              </span>
+            </span>
+            <button
+              onClick={() => setIsSettingsOpen(true)}
+              className="shrink-0 rounded bg-accent hover:bg-accent-hover text-white px-3 py-1 text-[11px] font-medium transition-colors"
+            >
+              Add key
+            </button>
+          </div>
+        )}
+
         {/* Main Workspace */}
         <div className="flex-1 flex overflow-hidden">
           
           {/* Chat Pane */}
           <div className={`
-            flex-col transition-all duration-300 h-full border-r border-lovable-border bg-lovable-dark
+            flex-col transition-all duration-300 h-full border-r border-line bg-canvas
             ${viewMode === ViewMode.CHAT ? 'flex w-full' : ''}
             ${viewMode === ViewMode.SPLIT ? 'hidden md:flex md:w-[450px]' : ''}
             ${viewMode === ViewMode.PREVIEW ? 'hidden' : ''}
@@ -391,11 +423,16 @@ const App: React.FC = () => {
           </div>
 
            {/* Right Sidebar: Run Settings */}
-           <RunSettingsPanel 
-              settings={runSettings} 
-              setSettings={setRunSettings} 
-              isOpen={isSettingsOpen} 
+           <RunSettingsPanel
+              settings={runSettings}
+              setSettings={setRunSettings}
+              isOpen={isSettingsOpen}
               onClose={() => setIsSettingsOpen(false)}
+              apiKey={apiKey}
+              buildTimeAvailable={buildTimeAvailable}
+              hasUserKey={hasUserKey}
+              onSaveKey={saveKey}
+              onForgetKey={forgetKey}
            />
 
         </div>

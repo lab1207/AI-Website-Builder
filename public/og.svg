@@ -1,0 +1,70 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630" font-family="Inter, Helvetica, Arial, sans-serif">
+  <defs>
+    <linearGradient id="accent" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#4f8cff" />
+      <stop offset="100%" stop-color="#7c5cff" />
+    </linearGradient>
+    <linearGradient id="panel" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#1a1b1f" />
+      <stop offset="100%" stop-color="#131417" />
+    </linearGradient>
+  </defs>
+
+  <rect width="1200" height="630" fill="#0e0e10" />
+  <circle cx="1010" cy="120" r="320" fill="#4f8cff" opacity="0.07" />
+  <circle cx="180" cy="560" r="280" fill="#7c5cff" opacity="0.06" />
+
+  <!-- Browser frame -->
+  <g transform="translate(64 96)">
+    <rect width="620" height="400" rx="18" fill="url(#panel)" stroke="#2f3135" stroke-width="2" />
+    <rect x="0" y="0" width="620" height="40" rx="18" fill="#1e1f22" />
+    <rect x="0" y="22" width="620" height="18" fill="#1e1f22" />
+    <line x1="0" y1="40" x2="620" y2="40" stroke="#2f3135" stroke-width="2" />
+    <circle cx="26" cy="20" r="5" fill="#3d4046" />
+    <circle cx="44" cy="20" r="5" fill="#3d4046" />
+    <circle cx="62" cy="20" r="5" fill="#3d4046" />
+    <rect x="92" y="11" width="330" height="18" rx="9" fill="#26272b" />
+    <text x="108" y="24" fill="#767c85" font-size="11" font-family="monospace">localhost:3000</text>
+
+    <!-- Chat side -->
+    <rect x="0" y="40" width="250" height="360" fill="#131417" />
+    <line x1="250" y1="40" x2="250" y2="400" stroke="#2f3135" stroke-width="2" />
+    <rect x="24" y="72" width="200" height="52" rx="12" fill="#1e1f22" />
+    <rect x="40" y="92" width="120" height="8" rx="4" fill="#3d4046" />
+    <rect x="40" y="108" width="80" height="8" rx="4" fill="#2f3135" />
+    <rect x="24" y="300" width="200" height="46" rx="22" fill="#1e1f22" />
+    <rect x="44" y="318" width="100" height="9" rx="4.5" fill="#3d4046" />
+    <circle cx="206" cy="323" r="13" fill="url(#accent)" />
+    <path d="M206 316 L206 330 M200 323 L212 323" stroke="#ffffff" stroke-width="2" stroke-linecap="round" />
+
+    <!-- Preview side -->
+    <rect x="278" y="72" width="316" height="70" rx="10" fill="#17171a" />
+    <rect x="298" y="92" width="150" height="10" rx="5" fill="url(#accent)" />
+    <rect x="298" y="112" width="240" height="8" rx="4" fill="#2f3135" />
+    <rect x="278" y="160" width="150" height="130" rx="10" fill="#17171a" />
+    <rect x="298" y="180" width="70" height="60" rx="6" fill="url(#accent)" opacity="0.85" />
+    <rect x="378" y="180" width="30" height="8" rx="4" fill="#2f3135" />
+    <rect x="378" y="196" width="30" height="8" rx="4" fill="#2f3135" />
+    <rect x="444" y="160" width="150" height="130" rx="10" fill="#17171a" />
+    <circle cx="519" cy="205" r="34" fill="none" stroke="url(#accent)" stroke-width="8" />
+    <path d="M519 171 A34 34 0 0 1 549 219" stroke="#7c5cff" stroke-width="8" stroke-linecap="round" fill="none" />
+    <rect x="462" y="256" width="114" height="8" rx="4" fill="#2f3135" />
+  </g>
+
+  <!-- Copy -->
+  <g transform="translate(724 150)">
+    <rect x="0" y="0" width="52" height="52" rx="13" fill="none" stroke="url(#accent)" stroke-width="3" />
+    <path d="M14 19h24M14 26h24M14 33h14" stroke="url(#accent)" stroke-width="3.5" stroke-linecap="round" />
+
+    <text x="0" y="122" fill="#eceef1" font-size="54" font-weight="700" letter-spacing="-1.5">AI Website</text>
+    <text x="0" y="180" fill="url(#accent)" font-size="54" font-weight="700" letter-spacing="-1.5">Builder</text>
+
+    <text x="0" y="232" fill="#a6abb3" font-size="21" font-weight="500">Describe it. Generate it.</text>
+    <text x="0" y="264" fill="#a6abb3" font-size="21" font-weight="500">Preview it. Export it.</text>
+
+    <text x="0" y="330" fill="#767c85" font-size="17">HTML • CSS • JavaScript</text>
+    <text x="0" y="360" fill="#767c85" font-size="17">Live preview • ZIP export • Open source</text>
+  </g>
+
+  <text x="64" y="580" fill="#767c85" font-size="16" font-family="monospace">github.com/lab1207/AI-Website-Builder</text>
+</svg>

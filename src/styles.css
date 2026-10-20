@@ -1,0 +1,105 @@
+@import 'tailwindcss';
+
+/*
+ * Design tokens. The old build pulled a Tailwind config and three font
+ * families from CDNs; everything is now bundled and shipped from the repo.
+ */
+@theme {
+  --color-canvas: #0e0e10;
+  --color-surface: #17171a;
+  --color-surface-2: #1e1f22;
+  --color-surface-3: #26272b;
+  --color-line: #2f3135;
+  --color-line-strong: #3d4046;
+  --color-ink: #eceef1;
+  --color-ink-muted: #a6abb3;
+  --color-ink-faint: #767c85;
+  --color-accent: #4f8cff;
+  --color-accent-hover: #3b7af0;
+  --color-accent-soft: #4f8cff26;
+  --color-danger: #ff6b6b;
+  --color-success: #4ade80;
+
+  --font-sans: 'Inter Variable', ui-sans-serif, system-ui, -apple-system,
+    'Segoe UI', sans-serif;
+  --font-mono: 'Fira Code Variable', ui-monospace, 'SFMono-Regular', Menlo,
+    monospace;
+}
+
+@layer base {
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+
+  body {
+    margin: 0;
+    background-color: var(--color-canvas);
+    color: var(--color-ink);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* Visible focus for keyboard users, everywhere. */
+  :focus-visible {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 2px;
+    border-radius: 4px;
+  }
+
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: var(--color-canvas);
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background: var(--color-line-strong);
+    border-radius: 5px;
+    border: 2px solid var(--color-canvas);
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background: #5e6067;
+  }
+}
+
+@layer components {
+  /* Thin scrollbars inside the chat transcript. */
+  .scroll-thin {
+    scrollbar-width: thin;
+    scrollbar-color: var(--color-line-strong) transparent;
+  }
+}
+
+/* Dropdown panels. The old build relied on tailwindcss-animate, which was
+ * pulled from a CDN and is not part of Tailwind v4. */
+@keyframes panel-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.animate-panel-in {
+  animation: panel-in 0.16s ease-out both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}

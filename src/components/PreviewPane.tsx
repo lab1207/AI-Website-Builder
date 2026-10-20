@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import JSZip from 'jszip';
 import { FileMap, DeviceType } from '../types';
+import { bundleHtml, buildPreviewDocument } from '../lib/preview';
 
 interface PreviewPaneProps {
   files: FileMap;
@@ -224,48 +225,13 @@ const PreviewPane: React.FC<PreviewPaneProps> = ({
       }
   };
 
-  // Helper to build the single HTML content
-  const getBundledHtml = () => {
-    if (!localFiles['index.html']) return '';
-    let htmlContent = localFiles['index.html'];
+  // The document handed to the preview iframe. Regenerated whenever the
+  // files change, or when the user asks for a reload.
+  const [previewDoc, setPreviewDoc] = useState('');
 
-    Object.keys(localFiles).forEach(filename => {
-        if (filename.endsWith('.css')) {
-            const cssContent = localFiles[filename];
-            const linkRegex = new RegExp(`<link[^>]+href=["']${filename}["'][^>]*>`, 'gi');
-            if (linkRegex.test(htmlContent)) {
-                htmlContent = htmlContent.replace(linkRegex, `<style>${cssContent}</style>`);
-            } else {
-                htmlContent = htmlContent.replace('</head>', `<style>${cssContent}</style></head>`);
-            }
-        }
-    });
-
-    Object.keys(localFiles).forEach(filename => {
-        if (filename.endsWith('.js')) {
-            const jsContent = localFiles[filename];
-            const scriptRegex = new RegExp(`<script[^>]+src=["']${filename}["'][^>]*>\\s*<\\/script>`, 'gi');
-            if (scriptRegex.test(htmlContent)) {
-                 htmlContent = htmlContent.replace(scriptRegex, `<script>${jsContent}</script>`);
-            } else {
-                 htmlContent = htmlContent.replace('</body>', `<script>${jsContent}</script></body>`);
-            }
-        }
-    });
-
-    return htmlContent;
-  };
-
-  // Re-run the bundle and update iframe whenever activeTab becomes 'preview' or localFiles change or reload requested
   useEffect(() => {
-    if (activeTab === 'preview' && iframeRef.current && localFiles['index.html']) {
-      const doc = iframeRef.current.contentDocument;
-      if (doc) {
-        doc.open();
-        const bundled = getBundledHtml();
-        doc.write(bundled); 
-        doc.close();
-      }
+    if (activeTab === 'preview' && localFiles['index.html']) {
+      setPreviewDoc(buildPreviewDocument(localFiles));
     }
   }, [localFiles, activeTab, refreshTrigger]);
 
@@ -279,6 +245,7 @@ const PreviewPane: React.FC<PreviewPaneProps> = ({
 
   const handleReload = () => {
     setRefreshTrigger(prev => prev + 1);
+    setPreviewDoc(buildPreviewDocument(localFiles));
   };
 
   const getWidthClass = () => {
@@ -303,7 +270,7 @@ const PreviewPane: React.FC<PreviewPaneProps> = ({
   };
   
   const handleExportSingleHTML = () => {
-      const bundled = getBundledHtml();
+      const bundled = bundleHtml(localFiles);
       if (bundled) {
          const blob = new Blob([bundled], { type: 'text/html' });
          const url = URL.createObjectURL(blob);
@@ -347,7 +314,7 @@ const PreviewPane: React.FC<PreviewPaneProps> = ({
 
   if (Object.keys(localFiles).length === 0) {
     return (
-      <div className="h-full w-full flex flex-col items-center justify-center text-lovable-textDim bg-lovable-dark">
+      <div className="h-full w-full flex flex-col items-center justify-center text-ink-muted bg-canvas">
         <i className="fa-regular fa-eye text-3xl mb-3 opacity-20"></i>
         <p>Preview will appear here</p>
       </div>
@@ -355,32 +322,32 @@ const PreviewPane: React.FC<PreviewPaneProps> = ({
   }
 
   const containerClasses = isFullScreen 
-    ? "fixed inset-0 z-50 flex flex-col h-screen w-screen bg-lovable-dark"
-    : "flex flex-col h-full bg-lovable-dark overflow-hidden";
+    ? "fixed inset-0 z-50 flex flex-col h-screen w-screen bg-canvas"
+    : "flex flex-col h-full bg-canvas overflow-hidden";
 
   const totalAssets = assets.media.length + assets.links.length + assets.content.length;
 
   return (
     <div className={containerClasses}>
       {/* Toolbar */}
-      <div className="h-12 bg-lovable-panel border-b border-lovable-border flex items-center justify-between px-4 z-20 relative shrink-0">
+      <div className="h-12 bg-surface-2 border-b border-line flex items-center justify-between px-4 z-20 relative shrink-0">
         <div className="flex items-center gap-4">
             <div className="flex border-b border-transparent">
                 <button 
                     onClick={() => setActiveTab('preview')}
-                    className={`px-3 py-3 text-xs font-medium transition-colors border-b-2 ${activeTab === 'preview' ? 'text-lovable-accent border-lovable-accent' : 'text-lovable-textDim border-transparent hover:text-lovable-text'}`}
+                    className={`px-3 py-3 text-xs font-medium transition-colors border-b-2 ${activeTab === 'preview' ? 'text-accent border-accent' : 'text-ink-muted border-transparent hover:text-ink'}`}
                 >
                     Preview
                 </button>
                 <button 
                     onClick={() => setActiveTab('code')}
-                    className={`px-3 py-3 text-xs font-medium transition-colors border-b-2 ${activeTab === 'code' ? 'text-lovable-accent border-lovable-accent' : 'text-lovable-textDim border-transparent hover:text-lovable-text'}`}
+                    className={`px-3 py-3 text-xs font-medium transition-colors border-b-2 ${activeTab === 'code' ? 'text-accent border-accent' : 'text-ink-muted border-transparent hover:text-ink'}`}
                 >
                     Code
                 </button>
                 <button 
                     onClick={() => setActiveTab('assets')}
-                    className={`px-3 py-3 text-xs font-medium transition-colors border-b-2 ${activeTab === 'assets' ? 'text-lovable-accent border-lovable-accent' : 'text-lovable-textDim border-transparent hover:text-lovable-text'}`}
+                    className={`px-3 py-3 text-xs font-medium transition-colors border-b-2 ${activeTab === 'assets' ? 'text-accent border-accent' : 'text-ink-muted border-transparent hover:text-ink'}`}
                 >
                     Assets <span className="ml-1 px-1.5 py-0.5 rounded-full bg-[#2a2b2d] text-[9px]">{totalAssets}</span>
                 </button>
@@ -400,25 +367,28 @@ const PreviewPane: React.FC<PreviewPaneProps> = ({
         </div>
 
         {activeTab === 'preview' && (
-             <div className="flex bg-lovable-dark rounded border border-lovable-border p-0.5">
+             <div className="flex bg-canvas rounded border border-line p-0.5">
                 <button 
                     onClick={() => onDeviceChange && onDeviceChange('desktop')}
-                    className={`p-1.5 rounded transition-colors ${previewDevice === 'desktop' ? 'bg-lovable-hover text-lovable-text' : 'text-lovable-textDim hover:text-lovable-text'}`}
-                    title="Desktop"
+                    className={`p-1.5 rounded transition-colors ${previewDevice === 'desktop' ? 'bg-surface-3 text-ink' : 'text-ink-muted hover:text-ink'}`}
+                    title="Desktop view"
+                    aria-label="Show desktop preview"
                 >
                     <i className="fa-solid fa-desktop text-xs"></i>
                 </button>
                 <button 
                     onClick={() => onDeviceChange && onDeviceChange('tablet')}
-                    className={`p-1.5 rounded transition-colors ${previewDevice === 'tablet' ? 'bg-lovable-hover text-lovable-text' : 'text-lovable-textDim hover:text-lovable-text'}`}
-                    title="Tablet"
+                    className={`p-1.5 rounded transition-colors ${previewDevice === 'tablet' ? 'bg-surface-3 text-ink' : 'text-ink-muted hover:text-ink'}`}
+                    title="Tablet view"
+                    aria-label="Show tablet preview"
                 >
                     <i className="fa-solid fa-tablet-screen-button text-xs"></i>
                 </button>
                 <button 
                     onClick={() => onDeviceChange && onDeviceChange('mobile')}
-                    className={`p-1.5 rounded transition-colors ${previewDevice === 'mobile' ? 'bg-lovable-hover text-lovable-text' : 'text-lovable-textDim hover:text-lovable-text'}`}
-                    title="Mobile"
+                    className={`p-1.5 rounded transition-colors ${previewDevice === 'mobile' ? 'bg-surface-3 text-ink' : 'text-ink-muted hover:text-ink'}`}
+                    title="Mobile view"
+                    aria-label="Show mobile preview"
                 >
                     <i className="fa-solid fa-mobile-screen-button text-xs"></i>
                 </button>
@@ -430,15 +400,17 @@ const PreviewPane: React.FC<PreviewPaneProps> = ({
                 <>
                     <button 
                         onClick={handleReload}
-                        className={`text-lovable-textDim hover:text-lovable-text hover:bg-lovable-hover p-1.5 rounded transition-colors`}
-                        title="Reload Preview"
+                        className={`text-ink-muted hover:text-ink hover:bg-surface-3 p-1.5 rounded transition-colors`}
+                        title="Reload preview"
+                    aria-label="Reload the preview"
                     >
                         <i className="fa-solid fa-rotate-right"></i>
                     </button>
                     <button 
                         onClick={() => setIsFullScreen(!isFullScreen)}
-                        className={`text-lovable-textDim hover:text-lovable-text hover:bg-lovable-hover p-1.5 rounded transition-colors`}
-                        title={isFullScreen ? "Exit Full Screen" : "Full Screen"}
+                        className={`text-ink-muted hover:text-ink hover:bg-surface-3 p-1.5 rounded transition-colors`}
+                        title={isFullScreen ? 'Exit full screen' : 'Full screen'}
+                    aria-label={isFullScreen ? 'Exit full screen' : 'Enter full screen'}
                     >
                         <i className={`fa-solid ${isFullScreen ? 'fa-compress' : 'fa-expand'}`}></i>
                     </button>
@@ -448,21 +420,21 @@ const PreviewPane: React.FC<PreviewPaneProps> = ({
             <div className="relative">
                 <button 
                     onClick={() => setShowExportMenu(!showExportMenu)}
-                    className={`flex items-center space-x-1 px-3 py-1.5 text-xs font-medium text-lovable-textDim hover:text-lovable-text hover:bg-lovable-hover rounded transition-colors`}
+                    className={`flex items-center space-x-1 px-3 py-1.5 text-xs font-medium text-ink-muted hover:text-ink hover:bg-surface-3 rounded transition-colors`}
                 >
                     <i className="fa-solid fa-download"></i>
                     <span>Export</span>
                 </button>
                 
                 {showExportMenu && (
-                    <div className="absolute top-full right-0 mt-1 w-48 bg-lovable-panel border border-lovable-border rounded shadow-xl py-1 z-50">
-                        <button onClick={handleExportSeparated} className="w-full text-left px-4 py-2 text-xs text-lovable-text hover:bg-lovable-hover transition-colors">
+                    <div className="absolute top-full right-0 mt-1 w-48 bg-surface-2 border border-line rounded shadow-xl py-1 z-50">
+                        <button onClick={handleExportSeparated} className="w-full text-left px-4 py-2 text-xs text-ink hover:bg-surface-3 transition-colors">
                             Download ZIP
                         </button>
-                         <button onClick={handleExportSingleHTML} className="w-full text-left px-4 py-2 text-xs text-lovable-text hover:bg-lovable-hover transition-colors">
+                         <button onClick={handleExportSingleHTML} className="w-full text-left px-4 py-2 text-xs text-ink hover:bg-surface-3 transition-colors">
                             Export Single HTML
                         </button>
-                        <button onClick={handleExportLiquid} className="w-full text-left px-4 py-2 text-xs text-lovable-text hover:bg-lovable-hover transition-colors">
+                        <button onClick={handleExportLiquid} className="w-full text-left px-4 py-2 text-xs text-ink hover:bg-surface-3 transition-colors">
                             Export Liquid
                         </button>
                     </div>
@@ -471,7 +443,7 @@ const PreviewPane: React.FC<PreviewPaneProps> = ({
 
              <button 
                 onClick={handleCopyCode}
-                className="flex items-center space-x-1 px-3 py-1.5 text-xs font-medium text-lovable-textDim hover:text-lovable-text hover:bg-lovable-hover rounded transition-colors"
+                className="flex items-center space-x-1 px-3 py-1.5 text-xs font-medium text-ink-muted hover:text-ink hover:bg-surface-3 rounded transition-colors"
              >
                 <i className={`fa-regular ${copyFeedback ? 'fa-check text-green-400' : 'fa-copy'}`}></i>
                 <span>{copyFeedback ? 'Copied' : 'Copy'}</span>
@@ -481,12 +453,13 @@ const PreviewPane: React.FC<PreviewPaneProps> = ({
 
       <div className="flex-1 bg-[#1e1e20] relative overflow-hidden flex justify-center z-10 w-full" onClick={() => setShowExportMenu(false)}>
         {activeTab === 'preview' && (
-             <div className={`h-full transition-all duration-300 shadow-xl ${getWidthClass()} bg-white my-0 mx-auto border-x border-lovable-border relative`}>
+             <div className={`h-full transition-all duration-300 shadow-xl ${getWidthClass()} bg-white my-0 mx-auto border-x border-line relative`}>
                 <iframe
                     ref={iframeRef}
                     title="Preview"
                     className="w-full h-full border-0"
-                    sandbox="allow-scripts allow-same-origin allow-forms"
+                    srcDoc={previewDoc}
+                    sandbox="allow-scripts allow-forms allow-modals allow-popups"
                 />
                 
                 {/* Annotation Overlay */}
@@ -497,7 +470,7 @@ const PreviewPane: React.FC<PreviewPaneProps> = ({
                         onClick={handleOverlayClick}
                     >
                          {/* Instruction Tooltip */}
-                         <div className="absolute top-4 left-1/2 -translate-x-1/2 bg-lovable-dark border border-lovable-border text-white text-xs px-3 py-1.5 rounded-full shadow-lg pointer-events-none animate-in fade-in slide-in-from-top-2">
+                         <div className="absolute top-4 left-1/2 -translate-x-1/2 bg-canvas border border-line text-white text-xs px-3 py-1.5 rounded-full shadow-lg pointer-events-none animate-in fade-in slide-in-from-top-2">
                              Select an element to annotate
                          </div>
                     </div>
@@ -506,9 +479,9 @@ const PreviewPane: React.FC<PreviewPaneProps> = ({
         )}
         
         {activeTab === 'code' && (
-            <div className="w-full h-full flex bg-lovable-dark">
-                <div className="w-48 bg-lovable-panel border-r border-lovable-border flex flex-col shrink-0">
-                    <div className="p-3 text-xs font-semibold text-lovable-textDim uppercase tracking-wider">
+            <div className="w-full h-full flex bg-canvas">
+                <div className="w-48 bg-surface-2 border-r border-line flex flex-col shrink-0">
+                    <div className="p-3 text-xs font-semibold text-ink-muted uppercase tracking-wider">
                         Files
                     </div>
                     <div className="flex-1 overflow-y-auto">
@@ -516,7 +489,7 @@ const PreviewPane: React.FC<PreviewPaneProps> = ({
                             <button
                                 key={filename}
                                 onClick={() => setSelectedFile(filename)}
-                                className={`w-full text-left px-4 py-2 text-xs font-mono flex items-center gap-2 ${selectedFile === filename ? 'bg-lovable-hover text-lovable-text border-l-2 border-lovable-accent' : 'text-lovable-textDim hover:bg-lovable-hover hover:text-lovable-text border-l-2 border-transparent'}`}
+                                className={`w-full text-left px-4 py-2 text-xs font-mono flex items-center gap-2 ${selectedFile === filename ? 'bg-surface-3 text-ink border-l-2 border-accent' : 'text-ink-muted hover:bg-surface-3 hover:text-ink border-l-2 border-transparent'}`}
                             >
                                 <span className="truncate">{filename}</span>
                             </button>
@@ -534,7 +507,7 @@ const PreviewPane: React.FC<PreviewPaneProps> = ({
                             autoCapitalize="off"
                         />
                     ) : (
-                        <div className="h-full flex items-center justify-center text-lovable-textDim">
+                        <div className="h-full flex items-center justify-center text-ink-muted">
                             Select a file
                         </div>
                     )}
@@ -543,36 +516,36 @@ const PreviewPane: React.FC<PreviewPaneProps> = ({
         )}
 
         {activeTab === 'assets' && (
-            <div className="w-full h-full bg-lovable-dark overflow-auto p-6">
+            <div className="w-full h-full bg-canvas overflow-auto p-6">
                 <div className="max-w-4xl mx-auto space-y-8 pb-10">
                     
                     {totalAssets === 0 && (
-                         <div className="flex flex-col items-center justify-center py-16 border border-dashed border-lovable-border rounded-lg bg-lovable-panel/30">
-                            <i className="fa-regular fa-folder-open text-4xl text-lovable-textDim mb-4 opacity-50"></i>
-                            <h3 className="text-lovable-text font-medium mb-1">No assets detected</h3>
-                            <p className="text-lovable-textDim text-sm">We couldn't find any editable images, links, or text in your project.</p>
+                         <div className="flex flex-col items-center justify-center py-16 border border-dashed border-line rounded-lg bg-surface-2/30">
+                            <i className="fa-regular fa-folder-open text-4xl text-ink-muted mb-4 opacity-50"></i>
+                            <h3 className="text-ink font-medium mb-1">No assets detected</h3>
+                            <p className="text-ink-muted text-sm">We couldn't find any editable images, links, or text in your project.</p>
                         </div>
                     )}
 
                     {/* Media Section */}
                     {assets.media.length > 0 && (
                         <div>
-                            <h2 className="text-sm font-semibold text-lovable-text uppercase tracking-wider mb-4 flex items-center gap-2">
+                            <h2 className="text-sm font-semibold text-ink uppercase tracking-wider mb-4 flex items-center gap-2">
                                 <i className="fa-regular fa-images"></i> Media ({assets.media.length})
                             </h2>
                             <div className="grid grid-cols-1 gap-4">
                                 {assets.media.map((asset) => (
-                                    <div key={asset.id} className="bg-lovable-panel border border-lovable-border rounded-lg p-4 flex gap-4 items-start group hover:border-lovable-border/80 transition-all">
-                                        <div className="w-24 h-24 shrink-0 bg-black/20 rounded flex items-center justify-center overflow-hidden border border-lovable-border relative">
+                                    <div key={asset.id} className="bg-surface-2 border border-line rounded-lg p-4 flex gap-4 items-start group hover:border-line/80 transition-all">
+                                        <div className="w-24 h-24 shrink-0 bg-black/20 rounded flex items-center justify-center overflow-hidden border border-line relative">
                                             {asset.type === 'image' ? (
                                                 <img src={asset.currentValue} alt="preview" className="w-full h-full object-cover" onError={(e) => (e.currentTarget.style.display = 'none')} />
                                             ) : (
-                                                <i className="fa-solid fa-video text-lovable-textDim text-2xl"></i>
+                                                <i className="fa-solid fa-video text-ink-muted text-2xl"></i>
                                             )}
                                         </div>
                                         <div className="flex-1 min-w-0 space-y-3">
                                             <div>
-                                                <label className="text-xs text-lovable-textDim font-medium block mb-1">Source URL</label>
+                                                <label className="text-xs text-ink-muted font-medium block mb-1">Source URL</label>
                                                 <div className="relative">
                                                      <input 
                                                         type="text" 
@@ -585,12 +558,12 @@ const PreviewPane: React.FC<PreviewPaneProps> = ({
                                                         onKeyDown={(e) => {
                                                             if (e.key === 'Enter') e.currentTarget.blur();
                                                         }}
-                                                        className="w-full bg-lovable-dark border border-lovable-border rounded px-3 py-2 text-sm text-lovable-text focus:border-lovable-accent focus:outline-none transition-colors font-mono"
+                                                        className="w-full bg-canvas border border-line rounded px-3 py-2 text-sm text-ink focus:border-accent focus:outline-none transition-colors font-mono"
                                                     />
                                                 </div>
                                             </div>
                                             <div className="flex items-center justify-between">
-                                                <span className="text-[10px] text-lovable-textDim bg-lovable-dark px-2 py-1 rounded">
+                                                <span className="text-[10px] text-ink-muted bg-canvas px-2 py-1 rounded">
                                                     {asset.type.toUpperCase()} • {asset.count} instance{asset.count > 1 ? 's' : ''}
                                                 </span>
                                             </div>
@@ -604,14 +577,14 @@ const PreviewPane: React.FC<PreviewPaneProps> = ({
                     {/* Links Section */}
                     {assets.links.length > 0 && (
                         <div>
-                            <h2 className="text-sm font-semibold text-lovable-text uppercase tracking-wider mb-4 flex items-center gap-2">
+                            <h2 className="text-sm font-semibold text-ink uppercase tracking-wider mb-4 flex items-center gap-2">
                                 <i className="fa-solid fa-link"></i> Navigation ({assets.links.length})
                             </h2>
                             <div className="grid grid-cols-1 gap-3">
                                 {assets.links.map((asset) => (
-                                    <div key={asset.id} className="bg-lovable-panel border border-lovable-border rounded-lg px-4 py-3 flex items-center gap-4 hover:border-lovable-border/80 transition-all">
-                                        <div className="w-8 h-8 rounded-full bg-lovable-dark flex items-center justify-center shrink-0">
-                                            <i className="fa-solid fa-globe text-lovable-textDim text-xs"></i>
+                                    <div key={asset.id} className="bg-surface-2 border border-line rounded-lg px-4 py-3 flex items-center gap-4 hover:border-line/80 transition-all">
+                                        <div className="w-8 h-8 rounded-full bg-canvas flex items-center justify-center shrink-0">
+                                            <i className="fa-solid fa-globe text-ink-muted text-xs"></i>
                                         </div>
                                         <div className="flex-1 min-w-0">
                                             <input 
@@ -625,11 +598,11 @@ const PreviewPane: React.FC<PreviewPaneProps> = ({
                                                 onKeyDown={(e) => {
                                                     if (e.key === 'Enter') e.currentTarget.blur();
                                                 }}
-                                                className="w-full bg-transparent border-none p-0 text-sm text-lovable-text focus:ring-0 focus:outline-none font-mono"
+                                                className="w-full bg-transparent border-none p-0 text-sm text-ink focus:ring-0 focus:outline-none font-mono"
                                                 placeholder="https://..."
                                             />
                                         </div>
-                                        <a href={asset.currentValue} target="_blank" rel="noopener noreferrer" className="text-lovable-textDim hover:text-lovable-accent p-2">
+                                        <a href={asset.currentValue} target="_blank" rel="noopener noreferrer" className="text-ink-muted hover:text-accent p-2">
                                             <i className="fa-solid fa-arrow-up-right-from-square text-xs"></i>
                                         </a>
                                     </div>
@@ -641,14 +614,14 @@ const PreviewPane: React.FC<PreviewPaneProps> = ({
                     {/* Content/Buttons Section */}
                     {assets.content.length > 0 && (
                         <div>
-                            <h2 className="text-sm font-semibold text-lovable-text uppercase tracking-wider mb-4 flex items-center gap-2">
+                            <h2 className="text-sm font-semibold text-ink uppercase tracking-wider mb-4 flex items-center gap-2">
                                 <i className="fa-regular fa-pen-to-square"></i> Content & Buttons ({assets.content.length})
                             </h2>
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                 {assets.content.map((asset) => (
-                                    <div key={asset.id} className="bg-lovable-panel border border-lovable-border rounded-lg p-4 hover:border-lovable-border/80 transition-all">
+                                    <div key={asset.id} className="bg-surface-2 border border-line rounded-lg p-4 hover:border-line/80 transition-all">
                                         <div className="flex items-center gap-2 mb-2">
-                                            <span className="text-[10px] uppercase font-bold text-lovable-textDim bg-lovable-dark px-1.5 py-0.5 rounded">
+                                            <span className="text-[10px] uppercase font-bold text-ink-muted bg-canvas px-1.5 py-0.5 rounded">
                                                 {asset.context || 'Text'}
                                             </span>
                                         </div>
@@ -663,7 +636,7 @@ const PreviewPane: React.FC<PreviewPaneProps> = ({
                                             onKeyDown={(e) => {
                                                 if (e.key === 'Enter') e.currentTarget.blur();
                                             }}
-                                            className="w-full bg-lovable-dark border border-lovable-border rounded px-3 py-2 text-sm text-lovable-text focus:border-lovable-accent focus:outline-none transition-colors"
+                                            className="w-full bg-canvas border border-line rounded px-3 py-2 text-sm text-ink focus:border-accent focus:outline-none transition-colors"
                                         />
                                     </div>
                                 ))}
