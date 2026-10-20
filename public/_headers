@@ -1,10 +1,4 @@
 /*
-  Security headers for the static build.
-  The app talks to the Gemini API directly from the browser, so
-  connect-src has to allow generativelanguage.googleapis.com.
-*/
-
-/*
   X-Content-Type-Options: nosniff
   X-Frame-Options: DENY
   Referrer-Policy: strict-origin-when-cross-origin
