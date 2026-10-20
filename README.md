@@ -217,6 +217,8 @@ The build output in `dist/` is a plain static folder. It runs anywhere that can 
 
 Security headers are shipped in `public/_headers`, `vercel.json`, and `netlify.toml`. If you replace them with your own, allow `https://generativelanguage.googleapis.com` in `connect-src`.
 
+> GitHub Pages cannot send custom response headers, so the same policy is also declared as a `<meta>` tag in `index.html`. That covers the Pages deployment; the header versions are there for hosts that do support them.
+
 The site uses a relative Vite base (`base: './'`), so it also works under a repository subpath.
 
 ---
