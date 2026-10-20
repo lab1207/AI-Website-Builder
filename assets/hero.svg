@@ -1,0 +1,92 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="300" viewBox="0 0 1200 300" font-family="Inter, Helvetica, Arial, sans-serif">
+  <defs>
+    <linearGradient id="brand" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#4f8cff" />
+      <stop offset="100%" stop-color="#7c5cff" />
+    </linearGradient>
+    <linearGradient id="brandSoft" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#4f8cff" />
+      <stop offset="100%" stop-color="#7c5cff" />
+    </linearGradient>
+    <radialGradient id="glow" cx="50%" cy="0%" r="80%">
+      <stop offset="0%" stop-color="#4f8cff" stop-opacity="0.18" />
+      <stop offset="100%" stop-color="#4f8cff" stop-opacity="0" />
+    </radialGradient>
+    <filter id="card" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="6" stdDeviation="12" flood-color="#0f172a" flood-opacity="0.10" />
+    </filter>
+  </defs>
+
+  <rect width="1200" height="300" fill="#ffffff" />
+  <rect width="1200" height="300" fill="url(#glow)" />
+
+  <!-- Logo mark -->
+  <g transform="translate(80 96)">
+    <rect width="108" height="108" rx="26" fill="url(#brand)" />
+    <path d="M30 40h40l-8 16 16-22-16-22z" fill="#ffffff" transform="translate(4,10)" />
+    <circle cx="84" cy="24" r="5" fill="#ffffff" opacity="0.85" />
+  </g>
+
+  <!-- Wordmark + tagline -->
+  <g transform="translate(220 96)">
+    <text x="0" y="46" fill="#16161a" font-size="54" font-weight="700" letter-spacing="-2">AI Website</text>
+    <text x="322" y="46" fill="url(#brandSoft)" font-size="54" font-weight="700" letter-spacing="-2">Builder</text>
+    <text x="0" y="86" fill="#5f636b" font-size="21" font-weight="500">Describe a website. Get the code, the live preview, and a finished project.</text>
+    <text x="0" y="118" fill="#91959d" font-size="16">Works with Gemini, OpenAI, OpenRouter, NVIDIA, Claude — or any OpenAI-compatible endpoint.</text>
+  </g>
+
+  <!-- Feature chips -->
+  <g transform="translate(220 150)" font-size="12.5" font-weight="600">
+    <g transform="translate(0 0)">
+      <rect width="112" height="26" rx="13" fill="#f4f4f6" stroke="#e4e4e8" />
+      <text x="56" y="17" text-anchor="middle" fill="#5f636b">6 providers</text>
+    </g>
+    <g transform="translate(120 0)">
+      <rect width="112" height="26" rx="13" fill="#f4f4f6" stroke="#e4e4e8" />
+      <text x="56" y="17" text-anchor="middle" fill="#5f636b">4 frameworks</text>
+    </g>
+    <g transform="translate(240 0)">
+      <rect width="118" height="26" rx="13" fill="#f4f4f6" stroke="#e4e4e8" />
+      <text x="59" y="17" text-anchor="middle" fill="#5f636b">live preview</text>
+    </g>
+    <g transform="translate(366 0)">
+      <rect width="118" height="26" rx="13" fill="#f4f4f6" stroke="#e4e4e8" />
+      <text x="59" y="17" text-anchor="middle" fill="#5f636b">no backend</text>
+    </g>
+  </g>
+
+  <!-- Mini UI mock on the right -->
+  <g transform="translate(760 56)" filter="url(#card)">
+    <rect width="360" height="190" rx="14" fill="#ffffff" stroke="#e4e4e8" />
+    <rect width="360" height="30" rx="14" fill="#fafafa" />
+    <rect y="16" width="360" height="14" fill="#fafafa" />
+    <line x1="0" y1="30" x2="360" y2="30" stroke="#e4e4e8" />
+    <circle cx="18" cy="15" r="4" fill="#ff5f57" />
+    <circle cx="32" cy="15" r="4" fill="#febc2e" />
+    <circle cx="46" cy="15" r="4" fill="#28c840" />
+    <rect x="90" y="9" width="180" height="12" rx="6" fill="#f0f0f2" />
+    <rect x="0" y="30" width="110" height="160" fill="#fafafa" />
+    <line x1="110" y1="30" x2="110" y2="190" stroke="#e4e4e8" />
+    <rect x="12" y="42" width="86" height="18" rx="9" fill="url(#brand)" opacity="0.15" />
+    <rect x="12" y="68" width="86" height="24" rx="6" fill="#ffffff" stroke="#e4e4e8" />
+    <rect x="12" y="98" width="86" height="24" rx="6" fill="#ffffff" stroke="#e4e4e8" />
+    <rect x="12" y="132" width="86" height="42" rx="8" fill="#ffffff" stroke="#e4e4e8" />
+    <rect x="126" y="48" width="120" height="12" rx="6" fill="#dcdfe4" />
+    <rect x="126" y="68" width="200" height="8" rx="4" fill="#e6e8ec" />
+    <rect x="126" y="82" width="160" height="8" rx="4" fill="#e6e8ec" />
+    <rect x="126" y="104" width="70" height="52" rx="8" fill="#f7f9ff" stroke="#e4e8ee" />
+    <rect x="206" y="104" width="70" height="52" rx="8" fill="#f7f9ff" stroke="#e4e8ee" />
+    <rect x="286" y="104" width="58" height="52" rx="8" fill="#f7f9ff" stroke="#e4e8ee" />
+    <rect x="126" y="166" width="60" height="14" rx="7" fill="url(#brand)" />
+  </g>
+
+  <!-- CTA -->
+  <g transform="translate(220 200)" font-size="13" font-weight="600">
+    <rect width="168" height="34" rx="10" fill="url(#brand)" />
+    <text x="84" y="22" text-anchor="middle" fill="#ffffff">Start building free →</text>
+    <g transform="translate(180 0)">
+      <rect width="150" height="34" rx="10" fill="#ffffff" stroke="#e4e4e8" />
+      <text x="75" y="22" text-anchor="middle" fill="#16161a">★ Star on GitHub</text>
+    </g>
+  </g>
+</svg>

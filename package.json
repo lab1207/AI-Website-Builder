@@ -1,7 +1,7 @@
 {
   "name": "ai-website-builder",
   "private": true,
-  "version": "1.0.0",
+  "version": "2.0.0",
   "description": "Generate complete HTML, CSS, and JavaScript websites from a prompt, with live preview and one-click ZIP export.",
   "type": "module",
   "license": "GPL-3.0-or-later",

@@ -32,7 +32,7 @@ const AppHeader: React.FC<AppHeaderProps> = ({
   return (
     <header className="flex h-14 shrink-0 items-center gap-3 border-b border-line bg-surface px-3 sm:px-4">
       <div className="flex min-w-0 items-center gap-2.5">
-        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[10px] bg-accent text-accent-ink">
+        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[10px] bg-gradient-to-br from-accent to-violet-500 text-white shadow-[var(--shadow-sm)]">
           <i className="fa-solid fa-bolt text-[13px]" aria-hidden="true" />
         </div>
         <span className="hidden shrink-0 text-[13px] font-semibold tracking-[-0.01em] text-ink sm:inline">

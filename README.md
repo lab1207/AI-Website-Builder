@@ -1,13 +1,13 @@
 <div align="center">
 
 <a href="https://lab1207.github.io/AI-Website-Builder/">
-  <img src="assets/logo.svg" alt="AI Website Builder" width="260" />
+  <img src="assets/hero.svg" alt="AI Website Builder — describe a website, get the code, the live preview, and a finished project" width="100%" />
 </a>
 
 ### Describe a website. Get the code, the live preview, and a finished project.
 
 <p>
-  <a href="https://lab1207.github.io/AI-Website-Builder/">Live demo</a> ·
+  <a href="https://lab1207.github.io/AI-Website-Builder/"><strong>Open the builder →</strong></a> ·
   <a href="https://github.com/lab1207/AI-Website-Builder">Source</a> ·
   <a href="https://github.com/lab1207/AI-Website-Builder/stargazers">Support us with a ⭐</a>
 </p>

@@ -171,12 +171,11 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
                   <button
                     key={suggestion.text}
                     onClick={() => setInput(suggestion.text)}
-                    className="group flex items-start gap-2.5 rounded-xl border border-line bg-surface px-3.5 py-3 text-left transition-all hover:-translate-y-px hover:border-line-strong hover:shadow-[var(--shadow-sm)]"
+                    className="group flex items-start gap-3 rounded-xl border border-line bg-surface px-3.5 py-3 text-left transition-all hover:-translate-y-px hover:border-line-strong hover:shadow-[var(--shadow-sm)]"
                   >
-                    <i
-                      className={`${suggestion.icon} mt-0.5 text-[12px] text-ink-faint transition-colors group-hover:text-accent`}
-                      aria-hidden="true"
-                    />
+                    <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-accent to-violet-500 text-white shadow-[var(--shadow-sm)] transition-transform group-hover:scale-110">
+                      <i className={`${suggestion.icon} text-[11px]`} aria-hidden="true" />
+                    </span>
                     <span className="text-[12.5px] leading-snug text-ink-muted transition-colors group-hover:text-ink">
                       {suggestion.text}
                     </span>

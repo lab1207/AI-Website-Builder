@@ -80,6 +80,28 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onEnter, starCount }) 
     return () => window.removeEventListener('scroll', onScroll);
   }, []);
 
+  // Sections rise in as they scroll into view.
+  useEffect(() => {
+    const elements = Array.from(document.querySelectorAll('.reveal'));
+    if (!('IntersectionObserver' in window)) {
+      elements.forEach((element) => element.classList.add('is-visible'));
+      return;
+    }
+    const observer = new IntersectionObserver(
+      (entries) => {
+        for (const entry of entries) {
+          if (entry.isIntersecting) {
+            entry.target.classList.add('is-visible');
+            observer.unobserve(entry.target);
+          }
+        }
+      },
+      { threshold: 0.12 },
+    );
+    elements.forEach((element) => observer.observe(element));
+    return () => observer.disconnect();
+  }, []);
+
   return (
     <div className="min-h-screen bg-canvas text-ink">
       {/* Top bar */}
@@ -144,6 +166,15 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onEnter, starCount }) 
               'radial-gradient(60% 50% at 50% 0%, color-mix(in srgb, var(--accent) 14%, transparent) 0%, transparent 70%)',
           }}
         />
+        <div
+          aria-hidden="true"
+          className="hero-blob -left-20 top-10 h-72 w-72 bg-[#4f8cff]"
+        />
+        <div
+          aria-hidden="true"
+          className="hero-blob -right-16 top-40 h-64 w-64 bg-[#7c5cff]"
+          style={{ animationDelay: '-9s' }}
+        />
         <div className="mx-auto max-w-6xl px-6 pb-20 pt-20 sm:pt-28">
           <div className="mx-auto max-w-3xl text-center">
             <span className="inline-flex items-center gap-2 rounded-full border border-line bg-surface px-3.5 py-1.5 text-[12px] font-medium text-ink-muted shadow-[var(--shadow-sm)]">
@@ -153,7 +184,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onEnter, starCount }) 
             <h1 className="mt-7 text-[44px] font-bold leading-[1.02] tracking-[-0.035em] text-ink sm:text-[60px] md:text-[72px]">
               Describe a website.
               <br />
-              <span className="bg-gradient-to-r from-accent to-violet-500 bg-clip-text text-transparent">
+              <span className="gradient-text">
                 Get the code.
               </span>
             </h1>
@@ -238,7 +269,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onEnter, starCount }) 
       </section>
 
       {/* Features */}
-      <section id="features" className="mx-auto max-w-6xl px-6 py-24">
+      <section id="features" className="reveal mx-auto max-w-6xl px-6 py-24">
         <div className="mx-auto max-w-2xl text-center">
           <p className="text-[11.5px] font-semibold uppercase tracking-[0.14em] text-accent">
             Features
@@ -277,7 +308,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onEnter, starCount }) 
       </section>
 
       {/* Providers */}
-      <section id="providers" className="border-y border-line bg-surface">
+      <section id="providers" className="reveal border-y border-line bg-surface">
         <div className="mx-auto max-w-6xl px-6 py-24">
           <div className="mx-auto max-w-2xl text-center">
             <p className="text-[11.5px] font-semibold uppercase tracking-[0.14em] text-accent">
@@ -317,7 +348,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onEnter, starCount }) 
       </section>
 
       {/* How it works */}
-      <section id="how" className="mx-auto max-w-6xl px-6 py-24">
+      <section id="how" className="reveal mx-auto max-w-6xl px-6 py-24">
         <div className="mx-auto max-w-2xl text-center">
           <p className="text-[11.5px] font-semibold uppercase tracking-[0.14em] text-accent">
             How it works
@@ -364,7 +395,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onEnter, starCount }) 
       </section>
 
       {/* Final CTA */}
-      <section className="border-t border-line bg-surface">
+      <section className="reveal border-t border-line bg-surface">
         <div className="mx-auto max-w-3xl px-6 py-24 text-center">
           <h2 className="text-[34px] font-bold tracking-[-0.02em] text-ink sm:text-[48px]">
             Ready to build?

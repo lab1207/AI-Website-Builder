@@ -382,6 +382,121 @@
       transform: translateX(100%);
     }
   }
+
+  /*
+   * Landing page motion.
+   *
+   * Sections rise in as they enter the viewport, so the page reads as a
+   * story unfolding rather than a wall of text.
+   */
+  .reveal {
+    opacity: 0;
+    transform: translateY(24px);
+    transition:
+      opacity 0.7s cubic-bezier(0.16, 1, 0.3, 1),
+      transform 0.7s cubic-bezier(0.16, 1, 0.3, 1);
+    will-change: opacity, transform;
+  }
+
+  .reveal.is-visible {
+    opacity: 1;
+    transform: translateY(0);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .reveal {
+      opacity: 1;
+      transform: none;
+      transition: none;
+    }
+  }
+
+  /* A light that sweeps across the primary button once on hover. */
+  .btn-primary {
+    position: relative;
+    overflow: hidden;
+  }
+
+  .btn-primary::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -80%;
+    width: 60%;
+    height: 100%;
+    transform: skewX(-20deg);
+    background-image: linear-gradient(
+      90deg,
+      transparent,
+      rgb(255 255 255 / 0.28),
+      transparent
+    );
+    opacity: 0;
+    transition: none;
+    pointer-events: none;
+  }
+
+  .btn-primary:not(:disabled):hover::before {
+    animation: btn-shine 0.65s ease-out forwards;
+  }
+
+  @keyframes btn-shine {
+    from {
+      left: -80%;
+      opacity: 1;
+    }
+    to {
+      left: 130%;
+      opacity: 0;
+    }
+  }
+
+  /* Slow drift for the hero gradient text. */
+  .gradient-text {
+    background-image: linear-gradient(90deg, #4f8cff, #7c5cff, #4f8cff);
+    background-size: 200% 100%;
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    animation: gradient-pan 6s linear infinite;
+  }
+
+  @keyframes gradient-pan {
+    to {
+      background-position: 200% 0;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .gradient-text {
+      animation: none;
+    }
+  }
+
+  /* Floating blob behind the hero, for depth. */
+  .hero-blob {
+    position: absolute;
+    border-radius: 50%;
+    filter: blur(80px);
+    opacity: 0.5;
+    pointer-events: none;
+    animation: blob-drift 18s ease-in-out infinite alternate;
+  }
+
+  @keyframes blob-drift {
+    from {
+      transform: translate(0, 0) scale(1);
+    }
+    to {
+      transform: translate(40px, -30px) scale(1.08);
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .hero-blob {
+      animation: none;
+    }
+  }
 }
 
 /* Small, quiet entrance used by the empty state and panels. */
