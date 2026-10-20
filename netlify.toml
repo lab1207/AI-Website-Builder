@@ -5,6 +5,9 @@
 [build.environment]
   NODE_VERSION = "22"
 
+# These rules mirror public/_headers, which is the copy that ships in the
+# publish directory for Netlify and Cloudflare Pages. src/lib/config.test.ts
+# fails the build if the two ever drift apart.
 [[headers]]
   for = "/*"
   [headers.values]
