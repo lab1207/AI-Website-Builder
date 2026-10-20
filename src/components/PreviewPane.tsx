@@ -277,9 +277,18 @@ const PreviewPane: React.FC<PreviewPaneProps> = ({
           <i className="fa-regular fa-eye text-[20px]" aria-hidden="true" />
         </div>
         <p className="mt-4 text-[14px] font-medium text-ink">Your preview will appear here</p>
-        <p className="mt-1 max-w-[280px] text-[12.5px] leading-relaxed text-ink-faint">
+        <p className="mt-1 max-w-[320px] text-[12.5px] leading-relaxed text-ink-faint">
           Describe a website on the left and it will render here as it is written.
         </p>
+        <a
+          href="https://github.com/lab1207/AI-Website-Builder"
+          target="_blank"
+          rel="noreferrer noopener"
+          className="btn btn-md btn-primary mt-6"
+        >
+          <i className="fa-brands fa-github text-[15px]" aria-hidden="true" />
+          Star us on GitHub
+        </a>
       </div>
     );
   }
@@ -318,7 +327,7 @@ const PreviewPane: React.FC<PreviewPaneProps> = ({
             <button
               onClick={onExplain}
               disabled={isGenerating}
-              className="hidden shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg border border-line px-2.5 py-1.5 text-[12px] font-medium text-ink-muted transition-colors hover:bg-surface-2 hover:text-ink disabled:opacity-40 sm:flex"
+              className="btn btn-md btn-secondary hidden shrink-0 sm:inline-flex"
             >
               <i className="fa-solid fa-graduation-cap text-[11px]" aria-hidden="true" />
               Explain
@@ -329,7 +338,7 @@ const PreviewPane: React.FC<PreviewPaneProps> = ({
             <button
               onClick={onAutoFix}
               disabled={isGenerating}
-              className="hidden shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg border border-line px-2.5 py-1.5 text-[12px] font-medium text-ink-muted transition-colors hover:bg-surface-2 hover:text-ink disabled:opacity-40 sm:flex"
+              className="btn btn-md btn-secondary hidden shrink-0 sm:inline-flex"
             >
               <i className="fa-solid fa-wand-magic-sparkles text-[11px]" aria-hidden="true" />
               Auto fix
@@ -376,7 +385,7 @@ const PreviewPane: React.FC<PreviewPaneProps> = ({
 
           <button
             onClick={() => setIsFullScreen(!isFullScreen)}
-            className="flex h-8 w-8 items-center justify-center rounded-lg text-ink-muted transition-colors hover:bg-surface-2 hover:text-ink"
+            className="btn btn-icon btn-ghost"
             aria-label={isFullScreen ? 'Exit full screen' : 'Enter full screen'}
             title={isFullScreen ? 'Exit full screen' : 'Full screen'}
           >
@@ -389,7 +398,7 @@ const PreviewPane: React.FC<PreviewPaneProps> = ({
           <div className="relative">
             <button
               onClick={() => setShowExportMenu(!showExportMenu)}
-              className="flex h-8 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg px-2.5 text-[12.5px] font-medium text-ink-muted transition-colors hover:bg-surface-2 hover:text-ink"
+              className="btn btn-md btn-ghost"
             >
               <i className="fa-solid fa-download text-[11px]" aria-hidden="true" />
               <span className="hidden sm:inline">Export</span>
@@ -399,7 +408,7 @@ const PreviewPane: React.FC<PreviewPaneProps> = ({
               <div className="animate-panel-in absolute right-0 top-full z-50 mt-1 w-52 overflow-hidden rounded-xl border border-line bg-surface py-1 shadow-[var(--shadow-lg)]">
                 <button
                   onClick={handleExportSeparated}
-                  className="w-full px-3.5 py-2 text-left text-[12.5px] text-ink transition-colors hover:bg-surface-2"
+                  className="btn btn-md btn-ghost w-full justify-start border-transparent bg-transparent"
                 >
                   Download ZIP
                 </button>
@@ -408,7 +417,7 @@ const PreviewPane: React.FC<PreviewPaneProps> = ({
                     setShowExportMenu(false);
                     onFileUpdate?.(localFiles);
                   }}
-                  className="w-full px-3.5 py-2 text-left text-[12.5px] text-ink transition-colors hover:bg-surface-2"
+                  className="btn btn-md btn-ghost w-full justify-start border-transparent bg-transparent"
                 >
                   Save changes
                 </button>
@@ -465,7 +474,7 @@ const PreviewPane: React.FC<PreviewPaneProps> = ({
               ))}
               <button
                 onClick={handleCopyCode}
-                className="ml-auto flex h-7 shrink-0 items-center gap-1.5 rounded-md px-2 text-[11.5px] text-ink-faint transition-colors hover:bg-surface-2 hover:text-ink"
+                className="btn btn-sm btn-ghost ml-auto shrink-0"
               >
                 <i
                   className={`fa-${copyFeedback ? 'solid' : 'regular'} fa-${

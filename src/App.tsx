@@ -6,14 +6,13 @@ import HistoryPanel from './components/HistoryPanel';
 import PublishPanel from './components/PublishPanel';
 import AppHeader from './components/AppHeader';
 import {
-  sendMessageToGemini,
   parseGeneratedFiles,
   DEFAULT_SYSTEM_INSTRUCTION,
   resetChat,
 } from './services/geminiService';
 import { Message, ViewMode, Attachment, FileMap, RunSettings, DeviceType } from './types';
-import { useApiKey } from './hooks/useApiKey';
-import { DEFAULT_MODEL } from './services/geminiService';
+import { useProvider } from './hooks/useProvider';
+import { sendChat, getProvider } from './lib/providers';
 import {
   ProjectType,
   Styling,
@@ -71,9 +70,10 @@ const App: React.FC = () => {
   const [styling, setStyling] = useState<Styling>('vanilla');
 
   const [panel, setPanel] = useState<'none' | 'settings' | 'history' | 'publish'>('none');
+  const [isPublishing, setIsPublishing] = useState(false);
 
   const [runSettings, setRunSettings] = useState<RunSettings>({
-    model: DEFAULT_MODEL,
+    model: getProvider('gemini').defaultModel,
     temperature: 1,
     topP: 0.95,
     topK: 40,
@@ -86,7 +86,20 @@ const App: React.FC = () => {
   const projectInputRef = useRef<HTMLInputElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const { apiKey, hasKey, buildTimeAvailable, hasUserKey, saveKey, forgetKey } = useApiKey();
+  const {
+    provider,
+    definition: providerDefinition,
+    selectProvider,
+    apiKey,
+    hasKey,
+    buildTimeAvailable,
+    hasUserKey,
+    saveKey,
+    forgetKey,
+    customBaseUrl,
+    saveCustomBaseUrl,
+    savedProviders,
+  } = useProvider();
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
@@ -184,11 +197,24 @@ const App: React.FC = () => {
       try {
         let accumulatedText = '';
 
-        await sendMessageToGemini(
-          textToSend,
-          attachments,
-          messages,
-          (chunk) => {
+        await sendChat({
+          provider,
+          apiKey,
+          model: runSettings.model,
+          systemInstruction: instruction,
+          messages: [
+            ...messages.map((message) => ({
+              role: message.role,
+              content: message.content,
+              attachments: message.attachments,
+            })),
+            { role: 'user', content: textToSend, attachments },
+          ],
+          isThinking,
+          runSettings,
+          signal: abortControllerRef.current.signal,
+          customBaseUrl,
+          onChunk: (chunk) => {
             accumulatedText = chunk;
             setMessages((previous) =>
               previous.map((message) =>
@@ -203,12 +229,7 @@ const App: React.FC = () => {
               setCurrentFiles(files);
             }
           },
-          instruction,
-          isThinking,
-          runSettings,
-          abortControllerRef.current.signal,
-          apiKey,
-        );
+        });
 
         const latency = Date.now() - startTime;
         setMessages((previous) =>
@@ -251,6 +272,8 @@ const App: React.FC = () => {
       projectType,
       styling,
       apiKey,
+      provider,
+      customBaseUrl,
       pushVersion,
     ],
   );
@@ -419,6 +442,7 @@ const App: React.FC = () => {
         onOpenHistory={() => setPanel(panel === 'history' ? 'none' : 'history')}
         onOpenPublish={() => setPanel(panel === 'publish' ? 'none' : 'publish')}
         historyCount={versions.length}
+        isPublishing={isPublishing}
       />
 
       {!hasKey && (
@@ -429,7 +453,8 @@ const App: React.FC = () => {
           <span className="flex min-w-0 items-center gap-2">
             <i className="fa-solid fa-key text-accent" aria-hidden="true" />
             <span className="truncate">
-              Add your Gemini API key to start building. It stays in this browser.
+              Add your {providerDefinition.label} API key to start building. It stays in this
+            browser.
             </span>
           </span>
           <button
@@ -502,9 +527,14 @@ const App: React.FC = () => {
             onProjectTypeChange={setProjectType}
             styling={styling}
             onStylingChange={setStyling}
+            provider={provider}
+            onProviderChange={selectProvider}
             apiKey={apiKey}
+            customBaseUrl={customBaseUrl}
+            onSaveCustomBaseUrl={saveCustomBaseUrl}
             buildTimeAvailable={buildTimeAvailable}
             hasUserKey={hasUserKey}
+            savedProviders={savedProviders}
             onSaveKey={saveKey}
             onForgetKey={forgetKey}
             onClose={() => setPanel('none')}
@@ -525,7 +555,11 @@ const App: React.FC = () => {
           <PublishPanel
             files={exportFiles}
             projectName={projectName}
-            onClose={() => setPanel('none')}
+            onBusyChange={setIsPublishing}
+            onClose={() => {
+              setPanel('none');
+              setIsPublishing(false);
+            }}
             onFigmaImport={handleFigmaImport}
           />
         )}

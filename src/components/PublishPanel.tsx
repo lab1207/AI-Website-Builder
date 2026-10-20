@@ -13,6 +13,8 @@ interface PublishPanelProps {
   onClose: () => void;
   /** Called with images pulled from Figma, ready to attach to the next prompt. */
   onFigmaImport: (images: Array<{ name: string; dataUrl: string }>) => void;
+  /** Lets the header show its own spinner while a deploy runs. */
+  onBusyChange?: (busy: boolean) => void;
 }
 
 type Section = 'download' | 'github' | 'vercel';
@@ -22,6 +24,7 @@ const PublishPanel: React.FC<PublishPanelProps> = ({
   projectName,
   onClose,
   onFigmaImport,
+  onBusyChange,
 }) => {
   const [section, setSection] = useState<Section>('download');
   const [status, setStatus] = useState<PublishResult | null>(null);
@@ -38,6 +41,7 @@ const PublishPanel: React.FC<PublishPanelProps> = ({
 
   const run = async (action: () => Promise<PublishResult>) => {
     setBusy(true);
+    onBusyChange?.(true);
     setStatus(null);
     try {
       setStatus(await action());
@@ -45,6 +49,7 @@ const PublishPanel: React.FC<PublishPanelProps> = ({
       setStatus({ ok: false, message: (error as Error).message });
     } finally {
       setBusy(false);
+      onBusyChange?.(false);
     }
   };
 

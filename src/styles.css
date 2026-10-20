@@ -155,6 +155,233 @@
     border-radius: var(--radius-xl);
     box-shadow: var(--shadow-sm);
   }
+
+  /*
+   * Buttons.
+   *
+   * One semantic class per role so every control reads the same way at a
+   * glance. `size` controls height, `variant` controls weight.
+   */
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    flex-shrink: 0;
+    white-space: nowrap;
+    border-radius: 10px;
+    font-weight: 600;
+    line-height: 1;
+    cursor: pointer;
+    transition:
+      background-color 0.15s ease,
+      border-color 0.15s ease,
+      color 0.15s ease,
+      box-shadow 0.15s ease,
+      opacity 0.15s ease,
+      transform 0.1s ease;
+    user-select: none;
+  }
+
+  .btn:disabled {
+    cursor: not-allowed;
+    opacity: 0.45;
+  }
+
+  .btn:not(:disabled):active {
+    transform: scale(0.98);
+  }
+
+  .btn-sm {
+    height: 1.75rem;
+    padding: 0 0.5rem;
+    font-size: 0.72rem;
+    border-radius: 8px;
+  }
+
+  .btn-md {
+    height: 2rem;
+    padding: 0 0.75rem;
+    font-size: 0.78rem;
+  }
+
+  .btn-lg {
+    height: 2.375rem;
+    padding: 0 1rem;
+    font-size: 0.8rem;
+  }
+
+  /* Filled accent. One per view, for the primary action. */
+  .btn-primary {
+    background: var(--accent);
+    border: 1px solid var(--accent);
+    color: var(--accent-ink);
+    box-shadow: var(--shadow-sm);
+  }
+
+  .btn-primary:not(:disabled):hover {
+    background: var(--accent-hover);
+    border-color: var(--accent-hover);
+  }
+
+  /* Quiet surface. The default for repeated controls. */
+  .btn-secondary {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    color: var(--ink);
+    box-shadow: var(--shadow-sm);
+  }
+
+  .btn-secondary:not(:disabled):hover {
+    background: var(--surface-3);
+    border-color: var(--line-strong);
+  }
+
+  /* No chrome. For icon buttons sitting inside a tool or card. */
+  .btn-ghost {
+    background: transparent;
+    border: 1px solid transparent;
+    color: var(--ink-muted);
+  }
+
+  .btn-ghost:not(:disabled):hover {
+    background: var(--surface-3);
+    color: var(--ink);
+  }
+
+  /* Accent tint. For secondary actions that still belong to the flow. */
+  .btn-soft {
+    background: var(--accent-soft);
+    border: 1px solid color-mix(in srgb, var(--accent) 28%, transparent);
+    color: var(--accent);
+  }
+
+  .btn-soft:not(:disabled):hover {
+    background: color-mix(in srgb, var(--accent) 20%, transparent);
+  }
+
+  .btn-danger {
+    background: transparent;
+    border: 1px solid color-mix(in srgb, var(--danger) 35%, transparent);
+    color: var(--danger);
+  }
+
+  .btn-danger:not(:disabled):hover {
+    background: color-mix(in srgb, var(--danger) 10%, transparent);
+  }
+
+  .btn-icon {
+    width: 2rem;
+    height: 2rem;
+    padding: 0;
+    border-radius: 9px;
+  }
+
+  .btn-icon.btn-sm {
+    width: 1.75rem;
+    height: 1.75rem;
+  }
+
+  /* A button that is waiting on work. */
+  .btn[data-loading='true'] {
+    color: transparent;
+    position: relative;
+    pointer-events: none;
+  }
+
+  .btn[data-loading='true']::after {
+    content: '';
+    position: absolute;
+    width: 1.1em;
+    height: 1.1em;
+    top: 50%;
+    left: 50%;
+    margin: -0.55em 0 0 -0.55em;
+    border-radius: 50%;
+    border-width: 1.75px;
+    border-style: solid;
+    border-color: currentColor;
+    border-top-color: transparent;
+    color: var(--ink);
+  }
+
+  .btn[data-loading='true'][class*='btn-primary']::after,
+  .btn[data-loading='true'][class*='btn-soft']::after {
+    color: var(--accent-ink);
+  }
+
+  .btn[data-loading='true'][class*='btn-soft']::after {
+    color: var(--accent);
+  }
+
+  /*
+   * Chat typing indicator. Three dots that chase each other.
+   */
+  .dots {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+  }
+
+  .dots > span {
+    width: 4px;
+    height: 4px;
+    border-radius: 50%;
+    background: currentColor;
+    animation: dot-bounce 1.1s infinite ease-in-out;
+  }
+
+  .dots > span:nth-child(1) {
+    animation-delay: 0s;
+  }
+
+  .dots > span:nth-child(2) {
+    animation-delay: 0.16s;
+  }
+
+  .dots > span:nth-child(3) {
+    animation-delay: 0.32s;
+  }
+
+  @keyframes dot-bounce {
+    0%,
+    70%,
+    100% {
+      transform: translateY(0);
+      opacity: 0.5;
+    }
+    35% {
+      transform: translateY(-4px);
+      opacity: 1;
+    }
+  }
+
+  /* Shimmer for a placeholder that has not arrived yet. */
+  .shimmer {
+    position: relative;
+    overflow: hidden;
+    background: var(--surface-3);
+  }
+
+  .shimmer::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    transform: translateX(-100%);
+    background-image: linear-gradient(
+      90deg,
+      transparent 0%,
+      color-mix(in srgb, var(--ink) 7%, transparent) 50%,
+      transparent 100%
+    );
+    animation: shimmer-sweep 1.6s infinite;
+  }
+
+  @keyframes shimmer-sweep {
+    100% {
+      transform: translateX(100%);
+    }
+  }
 }
 
 /* Small, quiet entrance used by the empty state and panels. */

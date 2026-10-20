@@ -195,18 +195,17 @@ const Composer: React.FC<ComposerProps> = ({
 
           <div className="ml-auto flex items-center gap-2">
             {isLoading ? (
-              <button
-                onClick={onStop}
-                className="flex h-8 items-center gap-1.5 rounded-lg border border-line px-3 text-[12.5px] font-medium text-ink transition-colors hover:bg-surface-3"
-              >
+              <button onClick={onStop} className="btn btn-md btn-secondary">
                 <i className="fa-solid fa-stop text-[10px]" aria-hidden="true" />
                 Stop
               </button>
             ) : (
               <button
                 onClick={handleSend}
-                disabled={!value.trim() && attachments.length === 0 && pendingAnnotations.length === 0}
-                className="flex h-8 w-8 items-center justify-center rounded-lg bg-accent text-accent-ink transition-all hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-30"
+                disabled={
+                  !value.trim() && attachments.length === 0 && pendingAnnotations.length === 0
+                }
+                className="btn btn-icon btn-primary"
                 aria-label="Send"
               >
                 <i className="fa-solid fa-arrow-up text-[12px]" aria-hidden="true" />

@@ -213,10 +213,15 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
             ))}
 
             {isLoading && (
-              <div className="flex items-center gap-2.5 pl-0.5 text-[12.5px] text-ink-faint">
+              <div className="flex items-center gap-2.5 pl-0.5 text-[12.5px] text-ink-muted">
                 <div className="flex h-6 w-6 items-center justify-center rounded-lg bg-accent-soft text-[10px] text-accent">
                   <i className="fa-solid fa-sparkles animate-pulse-soft" aria-hidden="true" />
                 </div>
+                <span className="dots text-[18px]">
+                  <span />
+                  <span />
+                  <span />
+                </span>
                 <span>Building your site…</span>
               </div>
             )}

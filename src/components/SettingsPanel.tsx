@@ -1,7 +1,13 @@
 import React, { useEffect, useId, useState } from 'react';
 import { RunSettings } from '../types';
-import { getAvailableModels, ModelOption } from '../services/geminiService';
-import { looksLikeGeminiKey } from '../lib/apiKey';
+import {
+  ModelOption,
+  PROVIDERS,
+  getProvider,
+  listProviderModels,
+} from '../lib/providers';
+import type { ProviderId } from '../lib/providers';
+import { looksLikeProviderKey } from '../lib/apiKey';
 import {
   PROJECT_TYPES,
   ProjectType,
@@ -16,11 +22,16 @@ interface SettingsPanelProps {
   onProjectTypeChange: (type: ProjectType) => void;
   styling: Styling;
   onStylingChange: (styling: Styling) => void;
+  provider: ProviderId;
+  onProviderChange: (provider: ProviderId) => void;
   apiKey: string;
+  customBaseUrl: string;
+  onSaveCustomBaseUrl: (url: string) => void;
   buildTimeAvailable: boolean;
   hasUserKey: boolean;
-  onSaveKey: (key: string) => { ok: boolean; persisted: boolean };
-  onForgetKey: () => void;
+  savedProviders: ProviderId[];
+  onSaveKey: (provider: ProviderId, key: string) => { ok: boolean; persisted: boolean };
+  onForgetKey: (provider: ProviderId) => void;
   onClose: () => void;
 }
 
@@ -31,9 +42,14 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({
   onProjectTypeChange,
   styling,
   onStylingChange,
+  provider,
+  onProviderChange,
   apiKey,
+  customBaseUrl,
+  onSaveCustomBaseUrl,
   buildTimeAvailable,
   hasUserKey,
+  savedProviders,
   onSaveKey,
   onForgetKey,
   onClose,
@@ -41,32 +57,32 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({
   const [models, setModels] = useState<ModelOption[]>([]);
   const [loadingModels, setLoadingModels] = useState(true);
   const [keyDraft, setKeyDraft] = useState('');
-  const [keyStatus, setKeyStatus] = useState<{ tone: 'ok' | 'warn'; text: string } | null>(
-    null,
-  );
-  const keyId = useId();
-  const modelId = useId();
+  const [keyStatus, setKeyStatus] = useState<{ tone: 'ok' | 'warn'; text: string } | null>(null);
+  const id = useId();
+
+  const definition = getProvider(provider);
 
   useEffect(() => {
     let cancelled = false;
 
-    const fetchModels = async () => {
+    const load = async () => {
       setLoadingModels(true);
       try {
-        const available = await getAvailableModels(apiKey);
+        const available = await listProviderModels(provider, apiKey, customBaseUrl);
         if (!cancelled) setModels(available);
       } catch {
-        if (!cancelled) setModels([]);
+        if (!cancelled) setModels(definition.fallbackModels);
       } finally {
         if (!cancelled) setLoadingModels(false);
       }
     };
 
-    fetchModels();
+    load();
     return () => {
       cancelled = true;
     };
-  }, [apiKey]);
+    // Models follow the key, the provider, and the endpoint.
+  }, [provider, apiKey, customBaseUrl, definition.fallbackModels]);
 
   const handleChange = (key: keyof RunSettings, value: unknown) => {
     setSettings({ ...settings, [key]: value });
@@ -76,35 +92,41 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({
     const trimmed = keyDraft.trim();
 
     if (!trimmed) {
-      onForgetKey();
+      onForgetKey(provider);
       setKeyDraft('');
       setKeyStatus({ tone: 'warn', text: 'Key removed from this browser.' });
       return;
     }
 
-    if (!looksLikeGeminiKey(trimmed)) {
+    if (!looksLikeProviderKey(provider, trimmed)) {
       setKeyStatus({
         tone: 'warn',
-        text: 'That does not look like a Gemini key. It should start with AIza and have no spaces.',
+        text: `That does not look like a ${definition.label} key. Check it and paste it again.`,
       });
       return;
     }
 
-    const result = onSaveKey(trimmed);
+    const result = onSaveKey(provider, trimmed);
     setKeyDraft('');
     setKeyStatus({
       tone: 'ok',
       text: result.persisted
-        ? 'Key saved in this browser. It is sent only to Google.'
+        ? `Key saved for ${definition.label}. It is sent only to ${definition.label}.`
         : 'Key set for this session. Storage is blocked, so it will be gone on reload.',
     });
   };
 
-  const handleForgetKey = () => {
-    onForgetKey();
-    setKeyDraft('');
-    setKeyStatus({ tone: 'warn', text: 'Key removed from this browser.' });
-  };
+  // When the chosen provider changes, make sure the selected model is offered.
+  useEffect(() => {
+    if (models.length === 0) return;
+    const exists = models.some((model) => model.value === settings.model);
+    if (!exists) {
+      const preferred = models.find((model) => model.value === definition.defaultModel) ?? models[0];
+      handleChange('model', preferred.value);
+    }
+    // Only react to the model list changing, not to every settings edit.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [models]);
 
   return (
     <aside
@@ -115,7 +137,7 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({
         <h2 className="text-[13.5px] font-semibold text-ink">Settings</h2>
         <button
           onClick={onClose}
-          className="flex h-8 w-8 items-center justify-center rounded-lg text-ink-muted transition-colors hover:bg-surface-2 hover:text-ink"
+          className="btn btn-icon btn-ghost"
           aria-label="Close settings"
         >
           <i className="fa-solid fa-xmark text-[13px]" aria-hidden="true" />
@@ -123,22 +145,90 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({
       </div>
 
       <div className="space-y-6 p-4">
+        <section className="space-y-2.5">
+          <h3 className="text-[12px] font-semibold text-ink">Provider</h3>
+          <div className="grid grid-cols-2 gap-1.5">
+            {PROVIDERS.map((option) => {
+              const saved = savedProviders.includes(option.id);
+              return (
+                <button
+                  key={option.id}
+                  onClick={() => onProviderChange(option.id)}
+                  aria-pressed={provider === option.id}
+                  className={`relative flex items-center justify-center gap-1.5 rounded-xl border px-2 py-2.5 text-[12px] font-medium transition-colors ${
+                    provider === option.id
+                      ? 'border-accent bg-accent-soft text-accent'
+                      : 'border-line bg-surface-2 text-ink-muted hover:border-line-strong hover:text-ink'
+                  }`}
+                >
+                  {option.label}
+                  {saved && (
+                    <span
+                      className="absolute right-1.5 top-1.5 h-1.5 w-1.5 rounded-full bg-success"
+                      aria-label="key saved"
+                      title="Key saved"
+                    />
+                  )}
+                </button>
+              );
+            })}
+          </div>
+          <p className="text-[11px] leading-relaxed text-ink-faint">
+            {definition.hint}
+            {definition.docsUrl && (
+              <>
+                {' '}
+                <a
+                  href={definition.docsUrl}
+                  target="_blank"
+                  rel="noreferrer noopener"
+                  className="text-accent underline"
+                >
+                  Get a key
+                </a>
+              </>
+            )}
+          </p>
+        </section>
+
+        {definition.customBaseUrl && (
+          <section className="space-y-1.5">
+            <label htmlFor={`${id}-base`} className="text-[12px] font-semibold text-ink">
+              Base URL
+            </label>
+            <input
+              id={`${id}-base`}
+              type="url"
+              value={customBaseUrl}
+              onChange={(event) => onSaveCustomBaseUrl(event.target.value)}
+              placeholder="https://your-endpoint.example/v1"
+              spellCheck={false}
+              autoComplete="off"
+              className="w-full rounded-xl border border-line bg-surface-2 px-3 py-2 text-[12.5px] text-ink outline-none placeholder:text-ink-faint focus:border-line-strong"
+            />
+            <p className="text-[11px] leading-relaxed text-ink-faint">
+              The API root, not the full chat path. For example
+              <code className="mx-1 rounded bg-surface-2 px-1 py-0.5 font-mono text-[10.5px]">
+                https://api.example.com/v1
+              </code>
+            </p>
+          </section>
+        )}
+
         <section className="space-y-2">
-          <label htmlFor={keyId} className="text-[12px] font-semibold text-ink">
-            API key
-          </label>
+          <h3 className="text-[12px] font-semibold text-ink">API key</h3>
 
           {hasUserKey ? (
             <div className="space-y-2 rounded-xl border border-line bg-surface-2 p-3">
               <p className="flex items-center gap-2 text-[12px] text-ink-muted">
                 <i className="fa-solid fa-circle-check text-success text-[11px]" aria-hidden="true" />
-                Your key is saved in this browser.
+                {definition.label} key saved in this browser
               </p>
               <button
-                onClick={handleForgetKey}
-                className="text-[12px] text-danger transition-colors hover:underline"
+                onClick={() => onForgetKey(provider)}
+                className="btn btn-sm btn-danger"
               >
-                Remove key from this browser
+                Remove key
               </button>
             </div>
           ) : (
@@ -149,25 +239,24 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({
                   This deployment ships with its own key. Add yours to override it.
                 </p>
               )}
+              <label htmlFor={`${id}-key`} className="sr-only">
+                {definition.label} API key
+              </label>
               <input
-                id={keyId}
+                id={`${id}-key`}
                 type="password"
                 value={keyDraft}
                 onChange={(event) => setKeyDraft(event.target.value)}
-                placeholder="AIza..."
+                placeholder={definition.keyPlaceholder}
                 autoComplete="off"
                 spellCheck={false}
                 className="w-full rounded-xl border border-line bg-surface-2 px-3 py-2 text-[12.5px] text-ink outline-none placeholder:text-ink-faint focus:border-line-strong"
               />
-              <button
-                onClick={handleSaveKey}
-                className="w-full rounded-xl bg-accent py-2 text-[12.5px] font-semibold text-accent-ink transition-colors hover:bg-accent-hover"
-              >
+              <button onClick={handleSaveKey} className="btn btn-md btn-primary w-full">
                 Save key
               </button>
               <p className="text-[11px] leading-relaxed text-ink-faint">
-                Stored in this browser only, and sent to Google with your requests. Get a free key
-                at aistudio.google.com/app/apikey.
+                Stored in this browser only, and sent to {definition.label} with your requests.
               </p>
             </>
           )}
@@ -183,11 +272,12 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({
         </section>
 
         <section className="space-y-2">
-          <label htmlFor={modelId} className="text-[12px] font-semibold text-ink">
+          <h3 className="text-[12px] font-semibold text-ink">Model</h3>
+          <label htmlFor={`${id}-model`} className="sr-only">
             Model
           </label>
           <select
-            id={modelId}
+            id={`${id}-model`}
             value={settings.model}
             onChange={(event) => handleChange('model', event.target.value)}
             className="w-full rounded-xl border border-line bg-surface-2 px-3 py-2 text-[12.5px] text-ink outline-none focus:border-line-strong"
@@ -200,7 +290,7 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({
             ))}
           </select>
           <p className="text-[11px] leading-relaxed text-ink-faint">
-            Read from your key, so you only see what your account can use.
+            Read from your key, so you only see what this account can use.
           </p>
         </section>
 
@@ -267,19 +357,17 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({
           ).map(([key, label, min, max, step]) => (
             <div key={key} className="space-y-1.5">
               <div className="flex items-center justify-between">
-                <label htmlFor={`${keyId}-${key}`} className="text-[11.5px] text-ink-muted">
+                <label htmlFor={`${id}-${key}`} className="text-[11.5px] text-ink-muted">
                   {label}
                 </label>
                 <input
-                  id={`${keyId}-${key}`}
+                  id={`${id}-${key}`}
                   type="number"
                   value={settings[key] ?? 0}
                   min={min}
                   max={max}
                   step={step}
-                  onChange={(event) =>
-                    handleChange(key, Number(event.target.value))
-                  }
+                  onChange={(event) => handleChange(key, Number(event.target.value))}
                   className="w-16 rounded-md border border-transparent bg-transparent px-1 py-0.5 text-right text-[11.5px] tabular-nums text-ink-faint outline-none transition-colors hover:border-line focus:border-line focus:bg-surface"
                 />
               </div>

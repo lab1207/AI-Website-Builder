@@ -11,6 +11,7 @@ interface AppHeaderProps {
   onOpenHistory: () => void;
   onOpenPublish: () => void;
   historyCount: number;
+  isPublishing: boolean;
 }
 
 const AppHeader: React.FC<AppHeaderProps> = ({
@@ -24,6 +25,7 @@ const AppHeader: React.FC<AppHeaderProps> = ({
   onOpenHistory,
   onOpenPublish,
   historyCount,
+  isPublishing,
 }) => {
   const nameId = useId();
 
@@ -71,9 +73,19 @@ const AppHeader: React.FC<AppHeaderProps> = ({
       </div>
 
       <div className="ml-auto flex items-center gap-1">
+        <a
+          href="https://github.com/lab1207/AI-Website-Builder"
+          target="_blank"
+          rel="noreferrer noopener"
+          className="btn btn-md btn-secondary"
+        >
+          <i className="fa-brands fa-github text-[13px]" aria-hidden="true" />
+          <span className="hidden sm:inline">Star</span>
+        </a>
+
         <button
           onClick={onOpenHistory}
-          className="relative flex h-8 items-center gap-2 rounded-lg px-2.5 text-[12.5px] font-medium text-ink-muted transition-colors hover:bg-surface-3 hover:text-ink"
+          className="btn btn-md btn-ghost relative"
         >
           <i className="fa-solid fa-clock-rotate-left text-[12px]" aria-hidden="true" />
           <span className="hidden sm:inline">History</span>
@@ -87,15 +99,18 @@ const AppHeader: React.FC<AppHeaderProps> = ({
         <button
           onClick={onOpenPublish}
           disabled={!hasFiles}
-          className="flex h-8 items-center gap-2 rounded-lg bg-accent px-3 text-[12.5px] font-semibold text-accent-ink transition-colors hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-40"
+          className="btn btn-md btn-primary"
+          data-loading={isPublishing ? 'true' : 'false'}
         >
           <i className="fa-solid fa-arrow-up-from-bracket text-[11px]" aria-hidden="true" />
-          <span className="hidden sm:inline">Publish</span>
+          <span className="hidden sm:inline">
+            {isPublishing ? 'Publishing…' : 'Publish'}
+          </span>
         </button>
 
         <button
           onClick={onToggleTheme}
-          className="flex h-8 w-8 items-center justify-center rounded-lg text-ink-muted transition-colors hover:bg-surface-3 hover:text-ink"
+          className="btn btn-icon btn-ghost"
           aria-label={theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'}
         >
           <i
@@ -106,10 +121,11 @@ const AppHeader: React.FC<AppHeaderProps> = ({
 
         <button
           onClick={onOpenSettings}
-          className="flex h-8 w-8 items-center justify-center rounded-lg text-ink-muted transition-colors hover:bg-surface-3 hover:text-ink"
+          className="btn btn-icon btn-ghost"
           aria-label="Open settings"
         >
-          <i className="fa-solid fa-sliders text-[13px]" aria-hidden="true" />
+          <i className="fa-solid fa-sliders text-[13px]" aria-hidden="true"
+          />
         </button>
       </div>
     </header>

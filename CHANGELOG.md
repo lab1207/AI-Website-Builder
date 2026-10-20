@@ -28,6 +28,17 @@ The first complete public release.
 - **Deploy to Vercel.** Publish the project and get a live URL.
 - **Import from Figma.** Pull the frames of a Figma file and use them as design references.
 - A light and a dark theme, with the choice remembered.
+- **Multi-provider support.** Google Gemini, OpenAI, OpenRouter, NVIDIA NIM, and Anthropic Claude out of the box, plus any OpenAI-compatible endpoint you paste a base URL for. Keys are stored one per provider, so switching between them does not lose your keys.
+- A button system with primary, secondary, ghost, soft, and danger styles, plus a loading state on every action that waits on a network call.
+- Loading and busy indicators: a typing indicator while a response streams, a shimmer behind the preview while it loads, and spinner states on publish and export.
+- A GitHub star button in the top bar and a "Star us on GitHub" call to action on the landing.
+- A new favicon mark, readable on both the light and dark themes.
+
+### Fixed
+
+- **Tailwind `{msg.latency && …}` footgun.** A first chunk with zero latency hid the generation time for every message. It is now an explicit null check.
+- Two buttons shared one className string, so a replace only updated one of them; the "Explain" and "Auto fix" buttons now stay on one line at every width.
+
 
 ### Changed
 

@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="640" height="110" viewBox="0 0 640 110" font-family="Inter, Helvetica, Arial, sans-serif">
+  <defs>
+    <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#4f8cff" />
+      <stop offset="100%" stop-color="#7c5cff" />
+    </linearGradient>
+  </defs>
+
+  <!-- Mark -->
+  <rect x="0" y="21" width="68" height="68" rx="15" fill="url(#g)" />
+  <path d="M21 46h23l-4 9 9-12-9-13z" fill="#ffffff" transform="translate(2,0)" />
+
+  <!-- Wordmark -->
+  <text x="84" y="64" fill="#16161a" font-size="34" font-weight="700" letter-spacing="-1.1">AI Website</text>
+  <text x="84" y="64" fill="#4f8cff" font-size="34" font-weight="700" letter-spacing="-1.1" transform="translate(244,0)">Builder</text>
+</svg>

@@ -46,8 +46,27 @@ describe('hosting configuration', () => {
     expect(csp).toContain("form-action 'self'");
   });
 
-  it('allows only the Gemini API for network calls', () => {
-    expect(csp).toContain("connect-src 'self' https://generativelanguage.googleapis.com");
+  it('allows the AI providers the builder can call', () => {
+    // Every host the UI can talk to is listed here, and `https:` covers a
+    // custom OpenAI-compatible endpoint the visitor points at.
+    const expected = [
+      'https://generativelanguage.googleapis.com',
+      'https://api.openai.com',
+      'https://openrouter.ai',
+      'https://integrate.api.nvidia.com',
+      'https://api.anthropic.com',
+    ];
+    for (const host of expected) {
+      expect(csp, `connect-src should allow ${host}`).toContain(host);
+    }
+    expect(csp).toContain("connect-src 'self'");
+  });
+
+  it('does not widen the rest of the policy', () => {
+    // Adding providers must not silently loosen the other directives.
+    expect(csp).not.toContain("default-src *");
+    expect(csp).not.toContain("script-src *");
+    expect(csp).not.toContain("connect-src *");
   });
 
   it('parses as a valid Netlify _headers file', () => {

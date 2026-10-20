@@ -1,27 +1,28 @@
 <div align="center">
 
-# ⚡ AI Website Builder
+<a href="https://lab1207.github.io/AI-Website-Builder/">
+  <img src="assets/logo.svg" alt="AI Website Builder" width="260" />
+</a>
 
 ### Describe a website. Get the code, the live preview, and a finished project.
 
 <p>
-
-<img src="https://img.shields.io/badge/React-20232A?style=for-the-badge&logo=react&logoColor=61DAFB"/>
-<img src="https://img.shields.io/badge/TypeScript-3178C6?style=for-the-badge&logo=typescript&logoColor=white"/>
-<img src="https://img.shields.io/badge/Vite-646CFF?style=for-the-badge&logo=vite&logoColor=white"/>
-<img src="https://img.shields.io/badge/TailwindCSS-06B6D4?style=for-the-badge&logo=tailwindcss&logoColor=white"/>
-<img src="https://img.shields.io/badge/license-GPL--3.0--or--later-e8b65f?style=for-the-badge"/>
-<a href="https://github.com/lab1207/AI-Website-Builder/stargazers"><img src="https://img.shields.io/github/stars/lab1207/AI-Website-Builder?color=e8b65f&label=stars&style=flat-square" alt="GitHub stars" /></a>
-
+  <a href="https://lab1207.github.io/AI-Website-Builder/">Live demo</a> ·
+  <a href="https://github.com/lab1207/AI-Website-Builder">Source</a> ·
+  <a href="https://github.com/lab1207/AI-Website-Builder/stargazers">Support us with a ⭐</a>
 </p>
 
 <p>
-  <a href="#what-it-does">What it does</a> •
-  <a href="#-features">Features</a> •
-  <a href="#-getting-started">Getting started</a> •
-  <a href="#-publishing">Publishing</a> •
-  <a href="#-deployment">Deployment</a> •
-  <a href="#-roadmap">Roadmap</a>
+<img src="https://img.shields.io/badge/React-20232A?style=for-the-badge&logo=react&logoColor=61DAFB" />
+<img src="https://img.shields.io/badge/TypeScript-3178C6?style=for-the-badge&logo=typescript&logoColor=white" />
+<img src="https://img.shields.io/badge/Vite-646CFF?style=for-the-badge&logo=vite&logoColor=white" />
+<img src="https://img.shields.io/badge/TailwindCSS-06B6D4?style=for-the-badge&logo=tailwindcss&logoColor=white" />
+</p>
+<p>
+<img src="https://img.shields.io/github/stars/lab1207/AI-Website-Builder?color=e8b65f&label=stars&style=flat-square" alt="GitHub stars" />
+<img src="https://img.shields.io/github/license/lab1207/AI-Website-Builder?style=flat-square" alt="License" />
+<img src="https://img.shields.io/github/actions/workflow/status/lab1207/AI-Website-Builder/ci.yml?branch=main&label=CI&style=flat-square" alt="CI" />
+<img src="https://img.shields.io/badge/dependabot-enabled-025e8c?style=flat-square&logo=dependabot" alt="Dependabot" />
 </p>
 
 </div>
@@ -37,8 +38,24 @@ A landing page for a specialty coffee brand called Ember,
 with a dark hero, a three-column feature grid, and a contact form.
 ```
 
-You get the files, a live preview you can click through, and a chat you can
-keep refining in. No account, no backend, no build step on your machine.
+You get the files, a live preview you can click through, and a chat you can keep
+refining in. No account, no backend, no build step on your machine.
+
+**Bring your own model.** It works with any of these, or any endpoint that speaks
+the OpenAI protocol:
+
+| Provider | Key prefix | Notes |
+|---|---|---|
+| <img src="https://img.shields.io/badge/Google%20Gemini-4285F4?style=flat-square&logo=google&logoColor=white" /> `AIza…` | free tier available |
+| <img src="https://img.shields.io/badge/OpenAI-412991?style=flat-square&logo=openai&logoColor=white" /> `sk-…` | uses your platform credits |
+| <img src="https://img.shields.io/badge/OpenRouter-6467F2?style=flat-square&logo=openrouter&logoColor=white" /> `sk-or-…` | one key, every model |
+| <img src="https://img.shields.io/badge/NVIDIA-76B900?style=flat-square&logo=nvidia&logoColor=white" /> `nvapi-…` | free developer credits |
+| <img src="https://img.shields.io/badge/Anthropic-D1915C?style=flat-square&logo=anthropic&logoColor=white" /> `sk-ant-…` | Claude Code style keys |
+| `Any endpoint` | — | OpenAI-compatible, paste the base URL |
+
+Keys are stored **per provider** in your own browser, so switching between
+Gemini and Claude never means retyping them nothing reaches any server of ours,
+because there are no servers.
 
 ---
 
@@ -53,6 +70,7 @@ keep refining in. No account, no backend, no build step on your machine.
 | | |
 |---|---|
 | **Prompt to website** | Describe it in plain English, with or without a reference image. |
+| **Six providers** | Google Gemini, OpenAI, OpenRouter, NVIDIA NIM, Anthropic Claude, or a custom OpenAI-compatible endpoint. |
 | **Live preview** | Renders as the code is written, in desktop, tablet, and mobile widths. |
 | **Conversational editing** | Keep refining in the same thread. The model sees your current files. |
 | **Point and change** | Click a spot in the preview and say what should be different there. |
@@ -66,31 +84,34 @@ keep refining in. No account, no backend, no build step on your machine.
 | **Import** | Bring in a `.zip` or `.html` and keep editing it with AI. |
 | **Figma import** | Pull frames from a Figma file and use them as design references. |
 | **Publish** | Download a ZIP, push to GitHub, or deploy to Vercel. |
-| **Your key, your browser** | The API key is stored locally and sent only to Google. |
 
 ---
 
-## 🚀 How it works
+## 🔄 How a request flows
 
 ```text
-              Describe your website
+             pick your provider and key
                        │
                        ▼
-              Google Gemini AI
+            describe the website
+                       │
+      ┌────────────────┴────────────────┐
+      ▼         ▼            ▼          ▼
+   Gemini    OpenAI     OpenRouter   Claude
+      └────────────────┬────────────────┘
+                       ▼
+      generate HTML • CSS • JavaScript
                        │
                        ▼
-      Generate HTML • CSS • JavaScript
+                 live preview
                        │
-                       ▼
-                Live preview
-                       │
-          ┌────────────┴────────────┐
-          ▼                         ▼
-   Refine with chat           Export, push, deploy
+        ┌──────────────┴──────────────┐
+        ▼                             ▼
+  refine with chat          export, push, deploy
 ```
 
-Everything runs in your browser. There is no server, no database, and no
-account. The only network call is the one you trigger by sending a prompt.
+Everything runs in your browser. The only network call is the one you trigger by
+sending a prompt, and it goes to the provider you picked.
 
 ---
 
@@ -105,16 +126,25 @@ npm install
 npm run dev
 ```
 
-Open <http://localhost:3000> and paste your Gemini API key into **Settings**.
-Get a free key from [Google AI Studio](https://aistudio.google.com/app/apikey).
+Open <http://localhost:3000>. In **Settings**, pick a provider and paste that
+provider's key. The model list is read from your key, so the picker only offers
+models this account can actually use.
 
-The key is stored in your browser's `localStorage` and sent only to
-`generativelanguage.googleapis.com`. There is no `.env` file and no key is
-ever committed.
+| Provider | Where to get a key |
+|---|---|
+| Google Gemini | [aistudio.google.com/app/apikey](https://aistudio.google.com/app/apikey) |
+| OpenAI | [platform.openai.com/api-keys](https://platform.openai.com/api-keys) |
+| OpenRouter | [openrouter.ai/keys](https://openrouter.ai/keys) |
+| NVIDIA NIM | [build.nvidia.com/settings/api-keys](https://build.nvidia.com/settings/api-keys) |
+| Anthropic | [console.anthropic.com/settings/keys](https://console.anthropic.com/settings/keys) |
+| Custom | your endpoint's docs |
 
-> **Self-hosting with a key baked in:** set `VITE_GEMINI_API_KEY` at build time
-> and the key is embedded in the published bundle, so anyone who opens the site
-> can read it. Only do this for a deployment you control.
+Keys stay in your browser and are sent only to the provider you chose.
+
+> **Self-hosting with a key baked in:** setting `VITE_GEMINI_API_KEY` at build
+> time puts that key in the published bundle, so anyone who opens the site can
+> read it. Only do that for a deployment you control. It applies to Gemini only;
+> other providers always need a visitor-supplied key.
 
 ---
 
@@ -154,10 +184,11 @@ subpath.
 
 ## 🛠 Stack
 
-React · TypeScript · Vite · Tailwind CSS 4 · Google Gemini · Vitest
+React · TypeScript · Vite · Tailwind CSS 4 · Vitest
 
 Everything is bundled from this repository. The app makes **no third-party
-requests** at runtime beyond the Gemini call you trigger.
+requests** at startup: those belong to the provider call you trigger, and to the
+Font Awesome and Inter fonts served locally.
 
 ---
 
@@ -166,14 +197,24 @@ requests** at runtime beyond the Gemini call you trigger.
 ```text
 src/
 ├── components/       # Header, chat, composer, preview, panels
-├── hooks/            # API key storage
-├── lib/              # Pure logic, covered by tests
-│   ├── apiKey.ts
-│   ├── preview.ts    # Preview bundling and the storage shim
-│   ├── projectTypes.ts
-│   ├── publish.ts    # GitHub, Vercel, Figma
-│   └── versionHistory.ts
-├── services/         # Gemini calls and file parsing
+│   ├── AppHeader.tsx      top bar, project name, star CTA
+│   ├── ChatPanel.tsx      conversation, instructions, thinking mode
+│   ├── Composer.tsx       prompt input, attachments, annotations
+│   ├── PreviewPane.tsx    preview, code, and asset tabs
+│   ├── SettingsPanel.tsx  provider, key, model, project controls
+│   ├── HistoryPanel.tsx   versions and restore
+│   └── PublishPanel.tsx   download, GitHub, Vercel, Figma
+├── hooks/
+│   └── useProvider.ts     provider + key state
+├── lib/              # pure logic, covered by tests
+│   ├── apiKey.ts         per-provider key storage
+│   ├── providers.ts      provider catalogue and the send layer
+│   ├── preview.ts        preview bundling and the storage shim
+│   ├── projectTypes.ts   vanilla, React, Vue, Next.js
+│   ├── publish.ts        GitHub, Vercel, Figma
+│   └── versionHistory.ts snapshots, diff, restore
+├── services/
+│   └── geminiService.ts  Gemini SDK call and file parsing
 ├── styles.css
 ├── types.ts
 ├── App.tsx
@@ -201,10 +242,12 @@ TypeScript, the Vitest suite, and a production build.
 - [x] Version history with restore
 - [x] Tailwind CSS output
 - [x] React, Vue, and Next.js projects
-- [x] Live model list
+- [x] Live model list per provider
 - [x] GitHub push and Vercel deploy
 - [x] Figma import
 - [x] AI code explanations
+- [x] Google Gemini, OpenAI, OpenRouter, NVIDIA, and Anthropic providers
+- [x] A custom OpenAI-compatible endpoint
 - [ ] Live preview for framework projects, without a local build
 - [ ] Multi-page sites
 - [ ] Project version diffing
