@@ -41,6 +41,7 @@ A complete redesign and rebuild of the product surface: a proper landing page, a
 
 - The landing page's sticky header now works: the root uses `overflow-x-clip` instead of a scroll-container-creating `overflow-x-hidden`.
 - Long hero words no longer force horizontal overflow on small screens.
+- Keyboard hints now read **Enter** and **Shift + Enter**; the return and shift glyphs were missing from the bundled interface font and rendered as empty boxes.
 - Provider cards stack below 430px instead of truncating their labels.
 - The disabled primary-button treatment has readable text and an obvious disabled state.
 - Feature card two now has a point-and-edit illustration that matches its copy.

@@ -270,7 +270,7 @@ const Composer: React.FC<ComposerProps> = ({
             {isDashboard && (
               <span className="hidden text-[9.5px] text-ink-faint sm:inline">
                 <kbd className="rounded border border-line bg-surface-2 px-1 font-sans text-[9px]">
-                  ↵
+                  Enter
                 </kbd>{' '}
                 to build
               </span>
@@ -309,7 +309,7 @@ const Composer: React.FC<ComposerProps> = ({
       {isDashboard && (
         <p className="mt-2.5 flex flex-wrap items-center justify-center gap-x-3 gap-y-1 text-[9.5px] text-ink-faint">
           <span className="inline-flex items-center gap-1">
-            <kbd className="rounded border border-line bg-surface px-1 font-sans">⇧↵</kbd>
+            <kbd className="rounded border border-line bg-surface px-1 font-sans">Shift + Enter</kbd>
             new line
           </span>
           <span className="inline-flex items-center gap-1">
