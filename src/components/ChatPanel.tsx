@@ -1,6 +1,8 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Message, Attachment } from '../types';
 import Composer from './Composer';
+import Icon from './Icon';
+import { LogoMark } from './Logo';
 
 interface ChatPanelProps {
   messages: Message[];
@@ -20,12 +22,24 @@ interface ChatPanelProps {
   onClear: () => void;
 }
 
-const SUGGESTIONS = [
-  { icon: 'fa-solid fa-store', text: 'A landing page for a specialty coffee brand' },
-  { icon: 'fa-solid fa-chart-pie', text: 'An analytics dashboard with charts and a sidebar' },
-  { icon: 'fa-solid fa-envelope', text: 'A contact form with validation and a success state' },
-  { icon: 'fa-solid fa-list-check', text: 'A task board with columns and drag-friendly cards' },
+const BUILD_STEPS = [
+  'Reading the brief',
+  'Planning the layout',
+  'Writing the markup',
+  'Polishing the details',
+  'Checking the viewport',
 ];
+
+function generatedFiles(content: string): string[] {
+  return Array.from(content.matchAll(/__FILE:\s*([^_\n]+?)\s*__/g)).map((match) =>
+    match[1].trim(),
+  );
+}
+
+function preFileText(content: string): string {
+  const index = content.search(/__FILE:/);
+  return (index === -1 ? content : content.slice(0, index)).trim();
+}
 
 const ChatPanel: React.FC<ChatPanelProps> = ({
   messages,
@@ -46,17 +60,30 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
 }) => {
   const scrollRef = useRef<HTMLDivElement>(null);
   const [systemOpen, setSystemOpen] = useState(false);
-  const isEmpty = messages.length === 0;
+  const [buildStep, setBuildStep] = useState(0);
+
+  useEffect(() => {
+    if (!isLoading) {
+      setBuildStep(0);
+      return;
+    }
+    const timer = window.setInterval(
+      () => setBuildStep((step) => (step + 1) % BUILD_STEPS.length),
+      2600,
+    );
+    return () => window.clearInterval(timer);
+  }, [isLoading]);
 
   useEffect(() => {
     const element = scrollRef.current;
-    if (element) element.scrollTop = element.scrollHeight;
+    if (!element) return;
+    element.scrollTo({ top: element.scrollHeight, behavior: isLoading ? 'auto' : 'smooth' });
   }, [messages, isLoading]);
 
   const insertCodeBlock = () => {
     const next = `${input}\n\`\`\`\n\n\`\`\``;
     setInput(next);
-    setTimeout(() => {
+    window.setTimeout(() => {
       const textarea = document.querySelector<HTMLTextAreaElement>('#composer-input');
       if (textarea) {
         textarea.focus();
@@ -66,187 +93,228 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
     }, 10);
   };
 
-  const renderContent = (content: string) => {
-    if (content.includes('__FILE:')) {
-      const parts = content.split(/__FILE:.*__/);
-      const preText = parts[0].trim();
-
-      return (
-        <div>
-          {preText && (
-            <div className="mb-3 whitespace-pre-wrap text-ink">{preText}</div>
-          )}
-          <div className="flex w-fit items-center gap-2.5 rounded-xl border border-line bg-surface-2 px-3 py-2">
-            <div className="flex h-6 w-6 items-center justify-center rounded-full bg-success/12 text-[11px] text-success">
-              <i className="fa-solid fa-check" aria-hidden="true" />
-            </div>
-            <div>
-              <p className="text-[12.5px] font-medium text-ink">Code generated</p>
-              <p className="text-[11.5px] text-ink-faint">Open the Preview tab to see it</p>
-            </div>
-          </div>
-        </div>
-      );
-    }
-
-    return <div className="whitespace-pre-wrap leading-relaxed text-ink">{content}</div>;
-  };
+  const visibleMessages = useMemo(() => messages, [messages]);
 
   return (
     <div className="flex h-full min-h-0 flex-col bg-canvas">
-      <div className="flex shrink-0 items-center justify-between gap-2 border-b border-line px-4 py-2">
-        <div className="flex items-center gap-1">
+      {/* Build log toolbar ------------------------------------------------ */}
+      <div className="flex h-11 shrink-0 items-center gap-1 border-b border-line bg-surface/50 px-3">
+        <span className="inline-flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-[0.1em] text-ink-faint">
+          <Icon name="message" size={11} />
+          Build log
+        </span>
+        <span className="rounded-full bg-surface-3 px-1.5 py-0.5 text-[9px] font-semibold text-ink-faint">
+          {messages.filter((message) => message.role === 'user').length}
+        </span>
+
+        <div className="ml-auto flex items-center gap-0.5">
           <button
             onClick={() => setSystemOpen((open) => !open)}
             aria-expanded={systemOpen}
-            className="flex items-center gap-1.5 rounded-lg px-2 py-1 text-[12.5px] font-medium text-ink-muted transition-colors hover:bg-surface-3 hover:text-ink"
+            className="toolbar-btn"
+            data-active={systemOpen || systemInstruction.trim() ? 'true' : 'false'}
+            title="Extra instructions for every request"
           >
-            <i
-              className={`fa-solid fa-chevron-${systemOpen ? 'up' : 'down'} text-[9px]`}
-              aria-hidden="true"
-            />
-            Instructions
+            <Icon name="sliders" size={11} />
+            <span className="hidden sm:inline">Instructions</span>
+            {systemInstruction.trim() && (
+              <span className="h-1.5 w-1.5 rounded-full bg-accent" aria-label="Custom instructions on" />
+            )}
           </button>
           <button
             onClick={() => setIsThinking(!isThinking)}
             aria-pressed={isThinking}
+            className="toolbar-btn"
+            data-active={isThinking ? 'true' : 'false'}
             title="Let the model reason before it answers"
-            className={`flex items-center gap-1.5 rounded-lg px-2 py-1 text-[12.5px] font-medium transition-colors ${
-              isThinking
-                ? 'bg-accent-soft text-accent'
-                : 'text-ink-muted hover:bg-surface-3 hover:text-ink'
-            }`}
           >
-            <i className="fa-solid fa-brain text-[11px]" aria-hidden="true" />
-            Thinking
+            <Icon name="bulb" size={11} />
+            <span className="hidden sm:inline">Thinking</span>
+          </button>
+          <button
+            onClick={onClear}
+            className="toolbar-btn"
+            title="Start a new project"
+            aria-label="Start a new project"
+          >
+            <Icon name="trash" size={11} />
+            <span className="hidden lg:inline">New</span>
           </button>
         </div>
-        <button
-          onClick={onClear}
-          className="flex items-center gap-1.5 rounded-lg px-2 py-1 text-[12.5px] font-medium text-ink-muted transition-colors hover:bg-surface-3 hover:text-ink"
-        >
-          <i className="fa-regular fa-trash-can text-[11px]" aria-hidden="true" />
-          New
-        </button>
       </div>
 
       {systemOpen && (
-        <div className="shrink-0 border-b border-line px-4 pb-3">
-          <label htmlFor="system-instructions" className="sr-only">
-            System instructions
+        <div className="shrink-0 border-b border-line bg-surface px-3 pb-3 pt-2.5">
+          <label
+            htmlFor="system-instructions"
+            className="text-[9.5px] font-bold uppercase tracking-[0.1em] text-ink-faint"
+          >
+            Extra instructions
           </label>
           <textarea
             id="system-instructions"
             value={systemInstruction}
             onChange={(event) => setSystemInstruction(event.target.value)}
-            placeholder="Extra guidance for the model, for example: use only system fonts, keep the palette warm and neutral, and always include a contact section."
-            className="scroll-thin h-24 w-full resize-none rounded-xl border border-line bg-surface p-3 font-mono text-[12px] leading-relaxed text-ink outline-none placeholder:text-ink-faint focus:border-line-strong"
+            placeholder="Use only system fonts. Keep the palette warm and neutral. Always include a contact section."
+            className="scroll-thin mt-1.5 h-20 w-full resize-none rounded-xl border border-line bg-surface-2 p-2.5 text-[11.5px] leading-relaxed text-ink outline-none placeholder:text-ink-faint focus:border-accent/40"
           />
-          <p className="mt-1.5 text-[11px] text-ink-faint">
-            Added to every request. Leave empty to use the built-in prompt.
+          <p className="mt-1 text-[9.5px] text-ink-faint">
+            Added to every request, after the built-in design rules.
           </p>
         </div>
       )}
 
+      {/* Conversation ----------------------------------------------------- */}
       <div ref={scrollRef} className="scroll-thin min-h-0 flex-1 overflow-y-auto">
-        {isEmpty ? (
-          <div className="flex h-full items-center justify-center px-6 py-10">
-            <div className="w-full max-w-[560px]">
-              <Composer
-                value={input}
-                onChange={setInput}
-                onSend={onSend}
-                isLoading={isLoading}
-                onStop={onStop}
-                isAnnotating={isAnnotating}
-                onToggleAnnotating={setIsAnnotating}
-                pendingAnnotations={pendingAnnotations}
-                onRemoveAnnotation={onRemoveAnnotation}
-                variant="hero"
-                onInsertCode={insertCodeBlock}
-              />
-
-              <div className="mt-6 grid grid-cols-1 gap-2 sm:grid-cols-2">
-                {SUGGESTIONS.map((suggestion) => (
-                  <button
-                    key={suggestion.text}
-                    onClick={() => setInput(suggestion.text)}
-                    className="group flex items-start gap-3 rounded-xl border border-line bg-surface px-3.5 py-3 text-left transition-all hover:-translate-y-px hover:border-line-strong hover:shadow-[var(--shadow-sm)]"
-                  >
-                    <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-accent to-violet-500 text-white shadow-[var(--shadow-sm)] transition-transform group-hover:scale-110">
-                      <i className={`${suggestion.icon} text-[11px]`} aria-hidden="true" />
-                    </span>
-                    <span className="text-[12.5px] leading-snug text-ink-muted transition-colors group-hover:text-ink">
-                      {suggestion.text}
-                    </span>
-                  </button>
-                ))}
-              </div>
-            </div>
+        {visibleMessages.length === 0 ? (
+          <div className="flex h-full flex-col items-center justify-center px-6 text-center">
+            <LogoMark size={36} />
+            <p className="mt-3 text-[13px] font-semibold text-ink">Your build log is empty</p>
+            <p className="mt-1 max-w-[240px] text-[11.5px] leading-relaxed text-ink-faint">
+              Close this view and describe a website on the dashboard to begin.
+            </p>
           </div>
         ) : (
-          <div className="space-y-5 px-4 py-5">
-            {messages.map((message) => (
-              <div key={message.id} className="flex flex-col gap-1.5">
-                {message.role === 'user' ? (
-                  <div className="ml-auto max-w-[85%] rounded-[18px] rounded-br-md bg-accent px-3.5 py-2.5 text-[13.5px] leading-relaxed text-accent-ink">
-                    {message.content}
-                  </div>
-                ) : (
-                  <div className="max-w-[92%]">
-                    <div className="flex items-start gap-2.5">
-                      <div className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-lg bg-accent-soft text-[10px] text-accent">
-                        <i className="fa-solid fa-sparkles" aria-hidden="true" />
-                      </div>
-                      <div className="min-w-0 flex-1 text-[13.5px]">{renderContent(message.content)}</div>
-                    </div>
+          <div className="space-y-4 px-3 py-4">
+            {visibleMessages.map((message) => {
+              const files = message.role === 'assistant' ? generatedFiles(message.content) : [];
+              const summary = preFileText(message.content);
+              const isError = message.role === 'assistant' && message.content.startsWith('Error:');
 
-                    {message.latency != null && message.latency > 0 && (
-                      <div className="pl-8.5 text-[10.5px] text-ink-faint">
-                        {(message.latency / 1000).toFixed(1)}s
+              if (message.role === 'user') {
+                return (
+                  <div key={message.id} className="flex flex-col items-end gap-1.5">
+                    <div className="max-w-[88%] rounded-[16px] rounded-br-[5px] bg-ink px-3.5 py-2.5 text-[12.5px] leading-relaxed text-canvas">
+                      {message.content.replace(/\n\n\[CONTEXT:[\s\S]*$/, '').trim()}
+                    </div>
+                    {message.attachments && message.attachments.length > 0 && (
+                      <div className="flex flex-wrap justify-end gap-1.5">
+                        {message.attachments.map((attachment, index) => (
+                          <img
+                            key={index}
+                            src={attachment.content}
+                            alt={`Attached reference ${index + 1}`}
+                            className="h-12 w-12 rounded-lg border border-line object-cover"
+                          />
+                        ))}
                       </div>
                     )}
                   </div>
-                )}
-              </div>
-            ))}
+                );
+              }
 
-            {isLoading && (
-              <div className="flex items-center gap-2.5 pl-0.5 text-[12.5px] text-ink-muted">
-                <div className="flex h-6 w-6 items-center justify-center rounded-lg bg-accent-soft text-[10px] text-accent">
-                  <i className="fa-solid fa-sparkles animate-pulse-soft" aria-hidden="true" />
+              return (
+                <div key={message.id} className="flex items-start gap-2.5">
+                  <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center overflow-hidden rounded-lg">
+                    <LogoMark size={24} />
+                  </span>
+
+                  <div className="min-w-0 flex-1">
+                    {isError ? (
+                      <div className="flex items-start gap-2 rounded-xl border border-danger/25 bg-danger/[0.06] px-3 py-2.5 text-[11.5px] leading-relaxed text-danger">
+                        <Icon name="alert" size={13} className="mt-0.5 shrink-0" />
+                        <span>{message.content.replace(/^Error:\s*/, '')}</span>
+                      </div>
+                    ) : message.content ? (
+                      <>
+                        {summary && (
+                          <div className="whitespace-pre-wrap text-[12.5px] leading-relaxed text-ink">
+                            {summary}
+                          </div>
+                        )}
+                        {files.length > 0 && (
+                          <div className="mt-2 rounded-xl border border-line bg-surface p-2.5 shadow-[var(--shadow-sm)]">
+                            <div className="flex items-center gap-2">
+                              <span className="flex h-5 w-5 items-center justify-center rounded-md bg-success/12 text-success">
+                                <Icon name="check" size={10} strokeWidth={2.4} />
+                              </span>
+                              <p className="text-[11px] font-semibold text-ink">
+                                {files.length} file{files.length === 1 ? '' : 's'} written
+                              </p>
+                              <span className="ml-auto text-[9px] text-ink-faint">
+                                preview synced
+                              </span>
+                            </div>
+                            <div className="mt-2 flex flex-wrap gap-1">
+                              {files.slice(0, 8).map((file) => (
+                                <span
+                                  key={file}
+                                  className="inline-flex max-w-full items-center gap-1 rounded border border-line bg-surface-2 px-1.5 py-0.5 font-mono text-[9px] text-ink-muted"
+                                >
+                                  <Icon name="file" size={8} className="shrink-0 text-ink-faint" />
+                                  <span className="truncate">{file}</span>
+                                </span>
+                              ))}
+                              {files.length > 8 && (
+                                <span className="px-1 py-0.5 text-[9px] text-ink-faint">
+                                  +{files.length - 8} more
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        )}
+                      </>
+                    ) : (
+                      <div className="rounded-xl border border-line bg-surface px-3 py-2.5">
+                        <div className="flex items-center gap-2 text-[11.5px] text-ink-muted">
+                          <span className="dots text-accent">
+                            <span />
+                            <span />
+                            <span />
+                          </span>
+                          {BUILD_STEPS[buildStep]}…
+                        </div>
+                        <div className="mt-2 h-1 overflow-hidden rounded-full bg-surface-3">
+                          <div
+                            className="h-full rounded-full bg-gradient-to-r from-accent to-accent-2 transition-all duration-700"
+                            style={{ width: `${35 + buildStep * 14}%` }}
+                          />
+                        </div>
+                      </div>
+                    )}
+
+                    {message.latency != null && message.latency > 0 && (
+                      <div className="mt-1.5 flex items-center gap-2 pl-0.5 font-mono text-[9px] text-ink-faint">
+                        <span>{(message.latency / 1000).toFixed(1)}s</span>
+                        <span className="h-0.5 w-0.5 rounded-full bg-ink-faint" />
+                        <span>{files.length > 0 ? 'generated' : 'answered'}</span>
+                      </div>
+                    )}
+                  </div>
                 </div>
-                <span className="dots text-[18px]">
+              );
+            })}
+
+            {isLoading && messages[messages.length - 1]?.content && (
+              <div className="flex items-center gap-2 pl-8.5 text-[10.5px] text-ink-faint">
+                <span className="dots text-accent">
                   <span />
                   <span />
                   <span />
                 </span>
-                <span>Building your site…</span>
+                <span className="animate-pulse-soft">{BUILD_STEPS[buildStep]}…</span>
               </div>
             )}
           </div>
         )}
       </div>
 
-      {!isEmpty && (
-        <div className="shrink-0 border-t border-line bg-canvas px-4 py-3">
-          <div className="mx-auto max-w-[720px]">
-            <Composer
-              value={input}
-              onChange={setInput}
-              onSend={onSend}
-              isLoading={isLoading}
-              onStop={onStop}
-              isAnnotating={isAnnotating}
-              onToggleAnnotating={setIsAnnotating}
-              pendingAnnotations={pendingAnnotations}
-              onRemoveAnnotation={onRemoveAnnotation}
-              variant="compact"
-              onInsertCode={insertCodeBlock}
-            />
-          </div>
-        </div>
-      )}
+      {/* Docked composer -------------------------------------------------- */}
+      <div className="shrink-0 border-t border-line bg-canvas px-3 py-2.5">
+        <Composer
+          value={input}
+          onChange={setInput}
+          onSend={onSend}
+          isLoading={isLoading}
+          onStop={onStop}
+          isAnnotating={isAnnotating}
+          onToggleAnnotating={setIsAnnotating}
+          pendingAnnotations={pendingAnnotations}
+          onRemoveAnnotation={onRemoveAnnotation}
+          variant="compact"
+          onInsertCode={insertCodeBlock}
+        />
+      </div>
     </div>
   );
 };

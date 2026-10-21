@@ -516,3 +516,16 @@ export async function listProviderModels(
     return definition.fallbackModels;
   }
 }
+
+/**
+ * True when the list came back as the curated fallback rather than from the
+ * visitor's key. Providers return their own fallback array (or the Gemini
+ * service's copy), so this compares the values instead of object identity.
+ */
+export function isFallbackModelList(provider: ProviderId, models: ModelOption[]): boolean {
+  const fallback = getProvider(provider).fallbackModels;
+  return (
+    models.length === fallback.length &&
+    models.every((model, index) => model.value === fallback[index].value)
+  );
+}

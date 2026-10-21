@@ -1,19 +1,25 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import JSZip from 'jszip';
 import { FileMap, DeviceType } from '../types';
-import { buildPreviewDocument } from '../lib/preview';
+import {
+  buildPreviewDocument,
+  defaultPreviewPage,
+  listPreviewPages,
+  pageLabel,
+} from '../lib/preview';
+import Icon, { type IconName } from './Icon';
 
 interface PreviewPaneProps {
   files: FileMap;
   isGenerating: boolean;
   onAutoFix?: () => void;
   onExplain?: () => void;
+  onGenerateFrameworkPreview?: () => void;
   isAnnotating?: boolean;
   onAnnotateSelect?: (x: number, y: number) => void;
   onFileUpdate?: (newFiles: FileMap) => void;
   previewDevice?: DeviceType;
   onDeviceChange?: (device: DeviceType) => void;
-  /** True when the project type needs a build step before it can run. */
+  /** True when the project type normally needs a build step. */
   needsBuild?: boolean;
   projectLabel?: string;
   /** The full project to export, including any scaffold files. */
@@ -35,8 +41,14 @@ interface DetectedAsset {
 
 const DEVICE_WIDTHS: Record<DeviceType, string> = {
   desktop: 'w-full',
-  tablet: 'w-[768px] max-w-full',
+  tablet: 'w-[820px] max-w-full',
   mobile: 'w-[390px] max-w-full',
+};
+
+const DEVICE_ICONS: Record<DeviceType, IconName> = {
+  desktop: 'monitor',
+  tablet: 'tablet',
+  mobile: 'smartphone',
 };
 
 const PreviewPane: React.FC<PreviewPaneProps> = ({
@@ -44,13 +56,14 @@ const PreviewPane: React.FC<PreviewPaneProps> = ({
   isGenerating,
   onAutoFix,
   onExplain,
+  onGenerateFrameworkPreview,
   isAnnotating,
   onAnnotateSelect,
   onFileUpdate,
   previewDevice = 'desktop',
   onDeviceChange,
   needsBuild = false,
-  projectLabel = 'this project',
+  projectLabel = 'This project',
   exportFiles,
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -59,8 +72,9 @@ const PreviewPane: React.FC<PreviewPaneProps> = ({
   const [showExportMenu, setShowExportMenu] = useState(false);
   const [isFullScreen, setIsFullScreen] = useState(false);
   const [selectedFile, setSelectedFile] = useState<string | null>(null);
+  const [activePage, setActivePage] = useState('');
+  const [previewNonce, setPreviewNonce] = useState(0);
   const [localFiles, setLocalFiles] = useState<FileMap>(files);
-  const [previewDoc, setPreviewDoc] = useState('');
   const [assets, setAssets] = useState<{
     media: DetectedAsset[];
     links: DetectedAsset[];
@@ -71,12 +85,17 @@ const PreviewPane: React.FC<PreviewPaneProps> = ({
     setLocalFiles(files);
   }, [files]);
 
-  const handleCodeChange = (newContent: string) => {
-    if (!selectedFile) return;
-    const updatedFiles = { ...localFiles, [selectedFile]: newContent };
-    setLocalFiles(updatedFiles);
-    onFileUpdate?.(updatedFiles);
-  };
+  const pages = useMemo(() => listPreviewPages(localFiles), [localFiles]);
+  const hasStaticPreview = Boolean(localFiles['preview.html']);
+  const canRender = pages.length > 0 && (!needsBuild || hasStaticPreview);
+
+  useEffect(() => {
+    if (pages.length === 0) {
+      setActivePage('');
+      return;
+    }
+    setActivePage((current) => (current && pages.includes(current) ? current : defaultPreviewPage(localFiles)));
+  }, [pages, localFiles]);
 
   useEffect(() => {
     if (Object.keys(localFiles).length > 0 && !selectedFile) {
@@ -96,6 +115,33 @@ const PreviewPane: React.FC<PreviewPaneProps> = ({
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [isFullScreen]);
+
+  // Multi-page links inside the preview ask the builder to switch page.
+  useEffect(() => {
+    const onMessage = (event: MessageEvent) => {
+      const data = event.data as { type?: string; page?: string } | null;
+      if (!data || data.type !== 'awb:preview-navigate' || !data.page) return;
+      const clean = data.page.replace(/^\.?\//, '');
+      if (pages.includes(clean)) {
+        setActivePage(clean);
+        setPreviewNonce((value) => value + 1);
+      }
+    };
+    window.addEventListener('message', onMessage);
+    return () => window.removeEventListener('message', onMessage);
+  }, [pages]);
+
+  const previewDoc = useMemo(() => {
+    if (!canRender || !activePage) return '';
+    return buildPreviewDocument(localFiles, activePage);
+  }, [localFiles, activePage, canRender]);
+
+  const handleCodeChange = (newContent: string) => {
+    if (!selectedFile) return;
+    const updatedFiles = { ...localFiles, [selectedFile]: newContent };
+    setLocalFiles(updatedFiles);
+    onFileUpdate?.(updatedFiles);
+  };
 
   const scanForAssets = () => {
     const mediaMap = new Map<string, DetectedAsset>();
@@ -124,18 +170,18 @@ const PreviewPane: React.FC<PreviewPaneProps> = ({
       }
     };
 
-    if (localFiles['index.html']) {
-      const html = localFiles['index.html'];
+    for (const [filename, source] of Object.entries(localFiles)) {
+      if (!/\.html?$/i.test(filename)) continue;
 
       const imgRegex = /<img[^>]+src=["']([^"']+)["']/g;
       let match: RegExpExecArray | null;
-      while ((match = imgRegex.exec(html)) !== null) addAsset(mediaMap, match[1], 'image');
+      while ((match = imgRegex.exec(source)) !== null) addAsset(mediaMap, match[1], 'image');
 
       const videoRegex = /<(?:video|source)[^>]+src=["']([^"']+)["']/g;
-      while ((match = videoRegex.exec(html)) !== null) addAsset(mediaMap, match[1], 'video');
+      while ((match = videoRegex.exec(source)) !== null) addAsset(mediaMap, match[1], 'video');
 
       const linkRegex = /<a[^>]+href=["']([^"']+)["'][^>]*>/g;
-      while ((match = linkRegex.exec(html)) !== null) {
+      while ((match = linkRegex.exec(source)) !== null) {
         const href = match[1];
         if (href && !href.startsWith('#') && !href.startsWith('javascript:')) {
           addAsset(linkMap, href, 'link');
@@ -143,19 +189,18 @@ const PreviewPane: React.FC<PreviewPaneProps> = ({
       }
 
       const buttonRegex = /<button[^>]*>([\s\S]*?)<\/button>/g;
-      while ((match = buttonRegex.exec(html)) !== null) {
+      while ((match = buttonRegex.exec(source)) !== null) {
         const text = match[1].trim();
         if (text && !text.includes('<')) addAsset(textMap, text, 'text', 'Button');
       }
     }
 
     for (const filename of Object.keys(localFiles)) {
-      if (filename.endsWith('.css') || filename === 'index.html') {
-        const urlRegex = /url\((['"]?)(.*?)\1\)/g;
-        let match: RegExpExecArray | null;
-        while ((match = urlRegex.exec(localFiles[filename])) !== null) {
-          addAsset(mediaMap, match[2], 'image');
-        }
+      if (!filename.endsWith('.css')) continue;
+      const urlRegex = /url\((['"]?)(.*?)\1\)/g;
+      let match: RegExpExecArray | null;
+      while ((match = urlRegex.exec(localFiles[filename])) !== null) {
+        addAsset(mediaMap, match[2], 'image');
       }
     }
 
@@ -176,20 +221,21 @@ const PreviewPane: React.FC<PreviewPaneProps> = ({
 
     for (const filename of Object.keys(newFiles)) {
       const content = newFiles[filename];
-      let newContent = content;
+      let newContent: string | null = null;
 
       if (asset.type === 'text') {
         const regex = new RegExp(`>${escapeRegExp(asset.currentValue)}<`, 'g');
         if (regex.test(content)) {
           newContent = content.replace(regex, `>${newValue}<`);
-          updated = true;
         }
       } else if (content.includes(asset.currentValue)) {
         newContent = content.split(asset.currentValue).join(newValue);
-        updated = true;
       }
 
-      if (updated) newFiles[filename] = newContent;
+      if (newContent !== null) {
+        newFiles[filename] = newContent;
+        updated = true;
+      }
     }
 
     if (updated) {
@@ -197,12 +243,6 @@ const PreviewPane: React.FC<PreviewPaneProps> = ({
       onFileUpdate?.(newFiles);
     }
   };
-
-  useEffect(() => {
-    if (activeTab === 'preview' && localFiles['index.html']) {
-      setPreviewDoc(buildPreviewDocument(localFiles));
-    }
-  }, [localFiles, activeTab]);
 
   const handleCopyCode = async () => {
     if (selectedFile && localFiles[selectedFile]) {
@@ -218,10 +258,11 @@ const PreviewPane: React.FC<PreviewPaneProps> = ({
 
   const handleExportSeparated = async () => {
     try {
+      const { default: JSZip } = await import('jszip');
       const zip = new JSZip();
-      const files = exportFiles ?? localFiles;
-      for (const filename of Object.keys(files)) {
-        zip.file(filename, files[filename]);
+      const source = exportFiles ?? localFiles;
+      for (const filename of Object.keys(source)) {
+        zip.file(filename, source[filename]);
       }
       const content = await zip.generateAsync({ type: 'blob' });
       const url = URL.createObjectURL(content);
@@ -244,92 +285,147 @@ const PreviewPane: React.FC<PreviewPaneProps> = ({
     );
   };
 
-  const fileNames = useMemo(() => Object.keys(localFiles), [localFiles]);
-  const totalAssets = assets.media.length + assets.links.length + assets.content.length;
+  const fileNames = useMemo(() => {
+    const names = Object.keys(localFiles);
+    return names.sort((a, b) => {
+      if (a === 'index.html') return -1;
+      if (b === 'index.html') return 1;
+      return a.localeCompare(b);
+    });
+  }, [localFiles]);
 
-  if (needsBuild) {
+  const totalAssets = assets.media.length + assets.links.length + assets.content.length;
+  const lineCount = selectedFile ? (localFiles[selectedFile]?.split('\n').length ?? 0) : 0;
+
+  /* Empty project -------------------------------------------------------- */
+  if (Object.keys(localFiles).length === 0) {
     return (
-      <div className="flex h-full w-full flex-col items-center justify-center bg-canvas px-8 text-center">
-        <div className="flex h-14 w-14 items-center justify-center rounded-2xl border border-line bg-surface text-ink-faint shadow-[var(--shadow-sm)]">
-          <i className="fa-solid fa-box text-[18px]" aria-hidden="true" />
+      <div className="relative flex h-full w-full flex-col items-center justify-center overflow-hidden bg-canvas px-6 text-center">
+        <div className="landing-grid pointer-events-none absolute inset-0 opacity-70" />
+        <div
+          className="pointer-events-none absolute left-1/2 top-1/3 h-60 w-72 -translate-x-1/2 rounded-full blur-[80px]"
+          style={{ background: 'color-mix(in srgb, var(--accent) 13%, transparent)' }}
+        />
+        <div className="relative">
+          <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl border border-line bg-surface text-accent shadow-[var(--shadow-md)]">
+            <Icon name="eye" size={22} />
+          </div>
+          <p className="mt-5 text-[16px] font-semibold tracking-[-0.02em] text-ink">
+            The canvas is waiting
+          </p>
+          <p className="mx-auto mt-1.5 max-w-[340px] text-[12.5px] leading-relaxed text-ink-muted">
+            Describe a site on the left. Every file renders here as it is written — click
+            through it, resize it, then point at anything you want changed.
+          </p>
+          <div className="mt-5 flex flex-wrap items-center justify-center gap-1.5">
+            {[
+              ['monitor', 'Live sandbox'],
+              ['code', 'Editable files'],
+              ['globe', 'Export or publish'],
+            ].map(([icon, label]) => (
+              <span
+                key={label}
+                className="inline-flex items-center gap-1.5 rounded-full border border-line bg-surface/80 px-2.5 py-1 text-[10.5px] font-medium text-ink-muted backdrop-blur"
+              >
+                <Icon name={icon as IconName} size={10} className="text-accent" />
+                {label}
+              </span>
+            ))}
+          </div>
         </div>
-        <p className="mt-4 text-[14px] font-medium text-ink">
-          {projectLabel} needs a build step
-        </p>
-        <p className="mt-1.5 max-w-[360px] text-[12.5px] leading-relaxed text-ink-muted">
-          The browser cannot run a bundled project on its own. Export the ZIP and start it with
-          <code className="mx-1 rounded bg-surface-2 px-1.5 py-0.5 font-mono text-[11.5px]">
-            npm install &amp;&amp; npm run dev
-          </code>
-        </p>
-        <p className="mt-4 max-w-[360px] text-[11.5px] leading-relaxed text-ink-faint">
-          The Code tab still shows every file, and Publish can push the whole project to GitHub
-          or Vercel.
-        </p>
       </div>
     );
   }
 
-  if (Object.keys(localFiles).length === 0) {
+  /* Framework project without a static preview --------------------------- */
+  if (needsBuild && !hasStaticPreview) {
     return (
-      <div className="flex h-full w-full flex-col items-center justify-center bg-canvas px-6 text-center">
-        <div className="flex h-14 w-14 items-center justify-center rounded-2xl border border-line bg-surface text-ink-faint shadow-[var(--shadow-sm)]">
-          <i className="fa-regular fa-eye text-[20px]" aria-hidden="true" />
+      <div className="relative flex h-full w-full flex-col items-center justify-center overflow-hidden bg-canvas px-6 text-center">
+        <div className="landing-grid pointer-events-none absolute inset-0 opacity-60" />
+        <div className="relative max-w-[430px]">
+          <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl border border-line bg-surface text-ink-muted shadow-[var(--shadow-md)]">
+            <Icon name="package" size={22} />
+          </div>
+          <p className="mt-5 text-[16px] font-semibold tracking-[-0.02em] text-ink">
+            {projectLabel} needs a build step
+          </p>
+          <p className="mt-2 text-[12.5px] leading-relaxed text-ink-muted">
+            The browser cannot run a bundled framework project on its own. Ask the assistant
+            for a self-contained <span className="font-mono text-[11px]">preview.html</span> and
+            it will appear here without installing anything.
+          </p>
+          {onGenerateFrameworkPreview && (
+            <button
+              onClick={onGenerateFrameworkPreview}
+              disabled={isGenerating}
+              className="btn btn-md btn-primary mt-5"
+            >
+              <Icon name="wand" size={13} />
+              Generate the live preview
+            </button>
+          )}
+          <p className="mt-4 text-[11px] leading-relaxed text-ink-faint">
+            The Code tab still shows every file. Export gives you the runnable scaffold with
+            <code className="mx-1 rounded bg-surface-2 px-1 py-0.5 font-mono text-[10px]">
+              npm install &amp;&amp; npm run dev
+            </code>
+            .
+          </p>
         </div>
-        <p className="mt-4 text-[14px] font-medium text-ink">Your preview will appear here</p>
-        <p className="mt-1 max-w-[320px] text-[12.5px] leading-relaxed text-ink-faint">
-          Describe a website on the left and it will render here as it is written.
-        </p>
-        <a
-          href="https://github.com/lab1207/AI-Website-Builder"
-          target="_blank"
-          rel="noreferrer noopener"
-          className="btn btn-md btn-primary mt-6"
-        >
-          <i className="fa-brands fa-github text-[15px]" aria-hidden="true" />
-          Star us on GitHub
-        </a>
       </div>
     );
   }
 
   const containerClasses = isFullScreen
-    ? 'fixed inset-0 z-50 flex flex-col h-screen w-screen bg-canvas'
-    : 'flex flex-col h-full bg-canvas overflow-hidden';
+    ? 'fixed inset-0 z-[75] flex h-screen w-screen flex-col bg-canvas'
+    : 'flex h-full flex-col overflow-hidden bg-canvas';
 
   return (
     <div className={containerClasses}>
-      <div className="flex h-12 shrink-0 items-center justify-between gap-3 border-b border-line bg-surface px-3">
-        <div className="flex items-center gap-1">
-          {(['preview', 'code', 'assets'] as Tab[]).map((tab) => (
+      {/* Toolbar --------------------------------------------------------- */}
+      <div className="flex h-12 shrink-0 items-center justify-between gap-2 border-b border-line bg-surface px-2.5">
+        <div className="flex items-center gap-0.5">
+          {(
+            [
+              ['preview', 'eye', 'Preview'],
+              ['code', 'code', 'Code'],
+              ['assets', 'palette', 'Assets'],
+            ] as const
+          ).map(([tab, icon, label]) => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
               aria-current={activeTab === tab}
-              className={`shrink-0 rounded-lg px-2.5 py-1.5 text-[12.5px] font-medium capitalize transition-colors ${
-                activeTab === tab
-                  ? 'bg-surface-3 text-ink'
-                  : 'text-ink-muted hover:bg-surface-2 hover:text-ink'
-              }`}
+              className="toolbar-btn"
+              data-active={activeTab === tab ? 'true' : 'false'}
             >
-              {tab}
+              <Icon name={icon} size={12} />
+              <span className="hidden sm:inline">{label}</span>
               {tab === 'assets' && totalAssets > 0 && (
-                <span className="ml-1.5 rounded-full bg-surface px-1.5 py-0.5 text-[10px] font-semibold text-ink-faint">
+                <span className="rounded-full bg-surface-3 px-1.5 py-0.5 text-[9px] font-semibold text-ink-faint">
                   {totalAssets}
                 </span>
               )}
             </button>
           ))}
+
+          {needsBuild && hasStaticPreview && (
+            <span className="ml-1 hidden items-center gap-1 rounded-full border border-success/25 bg-success/10 px-2 py-1 text-[9px] font-bold uppercase tracking-[0.06em] text-success lg:inline-flex">
+              <Icon name="check" size={8} strokeWidth={2.4} />
+              static preview
+            </span>
+          )}
         </div>
 
-        <div className="flex items-center gap-1.5">
+        <div className="flex items-center gap-1">
           {onExplain && activeTab === 'preview' && (
             <button
               onClick={onExplain}
               disabled={isGenerating}
-              className="btn btn-md btn-secondary hidden shrink-0 sm:inline-flex"
+              className="toolbar-btn hidden lg:inline-flex"
+              title="Explain the code"
             >
-              <i className="fa-solid fa-graduation-cap text-[11px]" aria-hidden="true" />
+              <Icon name="bulb" size={12} />
               Explain
             </button>
           )}
@@ -338,49 +434,41 @@ const PreviewPane: React.FC<PreviewPaneProps> = ({
             <button
               onClick={onAutoFix}
               disabled={isGenerating}
-              className="btn btn-md btn-secondary hidden shrink-0 sm:inline-flex"
+              className="toolbar-btn hidden lg:inline-flex"
+              title="Find and fix layout, accessibility, and syntax issues"
             >
-              <i className="fa-solid fa-wand-magic-sparkles text-[11px]" aria-hidden="true" />
+              <Icon name="wand" size={12} />
               Auto fix
             </button>
           )}
 
           {activeTab === 'preview' && (
-            <div className="flex items-center gap-0.5 rounded-lg border border-line bg-surface-2 p-0.5">
+            <div className="mx-0.5 hidden items-center gap-0.5 rounded-lg border border-line bg-surface-2 p-0.5 sm:flex">
               {(['desktop', 'tablet', 'mobile'] as DeviceType[]).map((device) => (
                 <button
                   key={device}
                   onClick={() => onDeviceChange?.(device)}
                   aria-label={`Show ${device} preview`}
                   title={`${device} preview`}
-                  className={`rounded-[6px] p-1.5 transition-colors ${
+                  className={`flex h-7 w-7 items-center justify-center rounded-[6px] transition-colors ${
                     previewDevice === device
                       ? 'bg-surface text-ink shadow-[var(--shadow-sm)]'
                       : 'text-ink-faint hover:text-ink'
                   }`}
                 >
-                  <i
-                    className={`fa-solid fa-${
-                      device === 'desktop'
-                        ? 'desktop'
-                        : device === 'tablet'
-                          ? 'tablet-screen-button'
-                          : 'mobile-screen-button'
-                    } text-[11px]`}
-                    aria-hidden="true"
-                  />
+                  <Icon name={DEVICE_ICONS[device]} size={12} />
                 </button>
               ))}
             </div>
           )}
 
           <button
-            onClick={() => setPreviewDoc(buildPreviewDocument(localFiles))}
-            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-ink-muted transition-colors hover:bg-surface-2 hover:text-ink"
+            onClick={() => setPreviewNonce((value) => value + 1)}
+            className="flex h-8 w-8 items-center justify-center rounded-lg text-ink-faint transition-colors hover:bg-surface-2 hover:text-ink"
             aria-label="Reload the preview"
             title="Reload the preview"
           >
-            <i className="fa-solid fa-rotate-right text-[12px]" aria-hidden="true" />
+            <Icon name="refresh" size={13} />
           </button>
 
           <button
@@ -389,27 +477,25 @@ const PreviewPane: React.FC<PreviewPaneProps> = ({
             aria-label={isFullScreen ? 'Exit full screen' : 'Enter full screen'}
             title={isFullScreen ? 'Exit full screen' : 'Full screen'}
           >
-            <i
-              className={`fa-solid ${isFullScreen ? 'fa-compress' : 'fa-expand'} text-[12px]`}
-              aria-hidden="true"
-            />
+            <Icon name={isFullScreen ? 'minimize' : 'maximize'} size={13} />
           </button>
 
           <div className="relative">
             <button
               onClick={() => setShowExportMenu(!showExportMenu)}
-              className="btn btn-md btn-ghost"
+              className="btn btn-md btn-secondary"
             >
-              <i className="fa-solid fa-download text-[11px]" aria-hidden="true" />
+              <Icon name="download" size={12} />
               <span className="hidden sm:inline">Export</span>
             </button>
 
             {showExportMenu && (
-              <div className="animate-panel-in absolute right-0 top-full z-50 mt-1 w-52 overflow-hidden rounded-xl border border-line bg-surface py-1 shadow-[var(--shadow-lg)]">
+              <div className="popover absolute right-0 top-full z-50 mt-1.5 w-56 overflow-hidden p-1">
                 <button
                   onClick={handleExportSeparated}
-                  className="btn btn-md btn-ghost w-full justify-start border-transparent bg-transparent"
+                  className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-[12px] font-medium text-ink transition-colors hover:bg-surface-2"
                 >
+                  <Icon name="download" size={13} className="text-ink-faint" />
                   Download ZIP
                 </button>
                 <button
@@ -417,9 +503,10 @@ const PreviewPane: React.FC<PreviewPaneProps> = ({
                     setShowExportMenu(false);
                     onFileUpdate?.(localFiles);
                   }}
-                  className="btn btn-md btn-ghost w-full justify-start border-transparent bg-transparent"
+                  className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-[12px] font-medium text-ink transition-colors hover:bg-surface-2"
                 >
-                  Save changes
+                  <Icon name="check" size={13} className="text-ink-faint" />
+                  Save code changes
                 </button>
               </div>
             )}
@@ -427,32 +514,85 @@ const PreviewPane: React.FC<PreviewPaneProps> = ({
         </div>
       </div>
 
+      {/* Body ------------------------------------------------------------ */}
       <div
-        className="relative flex min-h-0 flex-1 justify-center overflow-hidden bg-canvas p-4"
+        className="relative flex min-h-0 flex-1 justify-center overflow-hidden bg-canvas p-3 sm:p-4"
         onClick={() => setShowExportMenu(false)}
       >
         {activeTab === 'preview' && (
-          <div
-            className={`h-full overflow-hidden rounded-xl border border-line bg-white shadow-[var(--shadow-md)] transition-[width] duration-300 ${DEVICE_WIDTHS[previewDevice]}`}
-          >
-            <iframe
-              title="Preview"
-              className="h-full w-full border-0"
-              srcDoc={previewDoc}
-              sandbox="allow-scripts allow-forms allow-modals allow-popups"
-            />
-
-            {isAnnotating && (
-              <div
-                ref={containerRef}
-                className="absolute inset-0 z-50 cursor-crosshair bg-accent/5"
-                onClick={handleOverlayClick}
-              >
-                <div className="pointer-events-none absolute left-1/2 top-4 -translate-x-1/2 rounded-full bg-canvas/90 px-3 py-1.5 text-[11.5px] font-medium text-ink shadow-[var(--shadow-md)]">
-                  Click the spot you want to change
-                </div>
+          <div className={`flex h-full min-w-0 flex-col ${DEVICE_WIDTHS[previewDevice]}`}>
+            {pages.length > 1 && (
+              <div className="scroll-thin mb-2 flex shrink-0 items-center gap-1 overflow-x-auto">
+                <span className="mr-1 hidden items-center gap-1 text-[9.5px] font-bold uppercase tracking-[0.1em] text-ink-faint sm:inline-flex">
+                  <Icon name="files" size={10} />
+                  Pages
+                </span>
+                {pages.map((page) => (
+                  <button
+                    key={page}
+                    onClick={() => {
+                      setActivePage(page);
+                      setPreviewNonce((value) => value + 1);
+                    }}
+                    className={`inline-flex shrink-0 items-center gap-1.5 rounded-lg border px-2.5 py-1 text-[10.5px] font-semibold transition-colors ${
+                      activePage === page
+                        ? 'border-accent/30 bg-accent-soft text-accent'
+                        : 'border-line bg-surface text-ink-muted hover:text-ink'
+                    }`}
+                  >
+                    <Icon name="file" size={9} />
+                    {pageLabel(page)}
+                  </button>
+                ))}
               </div>
             )}
+
+            <div className="relative min-h-0 flex-1 overflow-hidden rounded-xl border border-line bg-white shadow-[var(--shadow-md)]">
+              <div className="flex h-8 shrink-0 items-center gap-2 border-b border-neutral-200 bg-neutral-50 px-3">
+                <span className="flex gap-1">
+                  <span className="h-2 w-2 rounded-full bg-[#ff5f57]" />
+                  <span className="h-2 w-2 rounded-full bg-[#febc2e]" />
+                  <span className="h-2 w-2 rounded-full bg-[#28c840]" />
+                </span>
+                <span className="mx-auto inline-flex max-w-[70%] items-center gap-1.5 truncate rounded-md bg-white px-2.5 py-0.5 font-mono text-[9px] text-neutral-500 shadow-sm">
+                  <Icon name="lock" size={7} />
+                  {activePage || 'preview'} · sandboxed
+                </span>
+              </div>
+
+              <div className="relative h-[calc(100%-2rem)] w-full">
+                <iframe
+                  key={`${activePage}-${previewNonce}`}
+                  title="Website preview"
+                  className="h-full w-full border-0 bg-white"
+                  srcDoc={previewDoc}
+                  sandbox="allow-scripts allow-forms allow-modals allow-popups"
+                />
+
+                {isAnnotating && (
+                  <div
+                    ref={containerRef}
+                    className="absolute inset-0 z-20 cursor-crosshair bg-accent/5"
+                    onClick={handleOverlayClick}
+                  >
+                    <div className="pointer-events-none absolute left-1/2 top-4 -translate-x-1/2 whitespace-nowrap rounded-full bg-ink px-3 py-1.5 text-[10.5px] font-semibold text-canvas shadow-[var(--shadow-md)]">
+                      Click the spot you want to change
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="mt-2 flex shrink-0 items-center justify-between px-0.5 text-[9.5px] text-ink-faint">
+              <span className="inline-flex items-center gap-1">
+                <Icon name="shield" size={9} />
+                Isolated preview · generated code cannot read your keys
+              </span>
+              <span className="hidden sm:inline">
+                {Object.keys(localFiles).length} file
+                {Object.keys(localFiles).length === 1 ? '' : 's'}
+              </span>
+            </div>
           </div>
         )}
 
@@ -463,71 +603,86 @@ const PreviewPane: React.FC<PreviewPaneProps> = ({
                 <button
                   key={filename}
                   onClick={() => setSelectedFile(filename)}
-                  className={`shrink-0 rounded-md px-2.5 py-1 font-mono text-[11.5px] transition-colors ${
+                  className={`inline-flex shrink-0 items-center gap-1.5 rounded-md px-2.5 py-1 font-mono text-[10.5px] transition-colors ${
                     selectedFile === filename
                       ? 'bg-surface-3 text-ink'
                       : 'text-ink-faint hover:bg-surface-2 hover:text-ink'
                   }`}
                 >
+                  <Icon name="file" size={9} />
                   {filename}
                 </button>
               ))}
-              <button
-                onClick={handleCopyCode}
-                className="btn btn-sm btn-ghost ml-auto shrink-0"
-              >
-                <i
-                  className={`fa-${copyFeedback ? 'solid' : 'regular'} fa-${
-                    copyFeedback ? 'check text-success' : 'copy'
-                  } text-[11px]`}
-                  aria-hidden="true"
-                />
-                {copyFeedback ? 'Copied' : 'Copy'}
-              </button>
+              <div className="ml-auto flex shrink-0 items-center gap-2 pl-2">
+                <span className="hidden font-mono text-[9px] text-ink-faint sm:inline">
+                  {lineCount} lines
+                </span>
+                <button onClick={handleCopyCode} className="btn btn-sm btn-ghost">
+                  <Icon
+                    name={copyFeedback ? 'check' : 'copy'}
+                    size={11}
+                    className={copyFeedback ? 'text-success' : ''}
+                  />
+                  {copyFeedback ? 'Copied' : 'Copy'}
+                </button>
+              </div>
             </div>
             <textarea
               value={selectedFile ? (localFiles[selectedFile] ?? '') : ''}
               onChange={(event) => handleCodeChange(event.target.value)}
               spellCheck={false}
               aria-label={`Code for ${selectedFile ?? 'the selected file'}`}
-              className="scroll-thin min-h-0 flex-1 resize-none bg-transparent p-4 font-mono text-[12.5px] leading-relaxed text-ink outline-none"
+              className="scroll-thin min-h-0 flex-1 resize-none bg-transparent p-4 font-mono text-[12px] leading-relaxed text-ink outline-none"
             />
+            <div className="flex shrink-0 items-center justify-between border-t border-line px-3 py-2 text-[9.5px] text-ink-faint">
+              <span>Edits here are live in the preview and saved to the project.</span>
+              <span className="font-mono">{selectedFile}</span>
+            </div>
           </div>
         )}
 
         {activeTab === 'assets' && (
           <div className="scroll-thin h-full w-full overflow-y-auto rounded-xl border border-line bg-surface p-4 shadow-[var(--shadow-sm)]">
             {totalAssets === 0 ? (
-              <p className="py-10 text-center text-[13px] text-ink-faint">
-                No images, links, or button labels found yet.
-              </p>
+              <div className="flex h-full flex-col items-center justify-center py-12 text-center">
+                <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-surface-2 text-ink-faint">
+                  <Icon name="palette" size={18} />
+                </span>
+                <p className="mt-3 text-[13px] font-medium text-ink">Nothing to edit yet</p>
+                <p className="mt-1 max-w-[280px] text-[11.5px] leading-relaxed text-ink-faint">
+                  Images, links, and button labels found in the generated pages will be
+                  editable here.
+                </p>
+              </div>
             ) : (
               <div className="space-y-5">
                 {(
                   [
-                    ['Images and media', assets.media],
-                    ['Links', assets.links],
-                    ['Button labels', assets.content],
+                    ['Images and media', 'image', assets.media],
+                    ['Links', 'link', assets.links],
+                    ['Button labels', 'pencil', assets.content],
                   ] as const
-                ).map(([title, group]) =>
+                ).map(([title, icon, group]) =>
                   group.length === 0 ? null : (
                     <section key={title}>
-                      <h3 className="mb-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-faint">
+                      <h3 className="mb-2 flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-[0.1em] text-ink-faint">
+                        <Icon name={icon} size={10} />
                         {title}
+                        <span className="rounded-full bg-surface-2 px-1.5 py-0.5 text-[9px]">
+                          {group.length}
+                        </span>
                       </h3>
                       <div className="space-y-1.5">
                         {group.map((asset) => (
                           <div key={asset.id} className="flex items-center gap-2">
                             <input
                               value={asset.currentValue}
-                              onChange={(event) =>
-                                handleUpdateAsset(asset, event.target.value)
-                              }
+                              onChange={(event) => handleUpdateAsset(asset, event.target.value)}
                               aria-label={`${title}: ${asset.originalValue}`}
-                              className="min-w-0 flex-1 rounded-lg border border-line bg-surface-2 px-2.5 py-1.5 text-[12px] text-ink outline-none focus:border-line-strong"
+                              className="input h-8 min-w-0 flex-1 py-0 font-mono text-[10.5px]"
                             />
                             {asset.count > 1 && (
-                              <span className="shrink-0 rounded-full bg-surface-3 px-1.5 py-0.5 text-[10px] text-ink-faint">
+                              <span className="shrink-0 rounded-full bg-surface-3 px-1.5 py-0.5 text-[9px] text-ink-faint">
                                 ×{asset.count}
                               </span>
                             )}

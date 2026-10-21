@@ -20,9 +20,7 @@ const SKIPPED_DIRECTORIES = new Set([
   'dist',
   'dist-ssr',
   '.git',
-  '.github',
   'coverage',
-  'assets', // screenshots and logos are binary; nothing to scan
 ]);
 
 /** Binary extensions a text scan cannot read meaningfully. */
@@ -135,6 +133,12 @@ describe('no API keys in the repository', () => {
       .filter((file) => file.startsWith('src'));
     expect(files.length).toBeGreaterThan(10);
     expect(files).toContain(join('src', 'App.tsx'));
+
+    // The scan also covers the files that define CI and the brand assets,
+    // not just application source.
+    const all = listFiles(ROOT).map((file) => file.slice(ROOT.length + 1));
+    expect(all).toContain(join('.github', 'workflows', 'ci.yml'));
+    expect(all).toContain(join('assets', 'logo.svg'));
   });
 
   it('never embeds a build-time key into committed source', () => {

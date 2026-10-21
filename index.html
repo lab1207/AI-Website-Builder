@@ -1,66 +1,98 @@
 <!doctype html>
-<html lang="en" data-theme="dark">
+<html lang="en" data-theme="light">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-    <title>AI Website Builder — Generate a website from a prompt</title>
+    <title>AI Website Builder — Describe it. Watch it become a real website.</title>
     <meta
       name="description"
-      content="Describe a website in plain English and generate complete HTML, CSS, and JavaScript with live preview, conversational editing, and one-click ZIP export. Runs entirely in your browser."
+      content="Generate complete multi-page sites in HTML, React, Vue, or Next.js — with live preview, version diffs, domain guides, and one-click publishing."
     />
     <meta name="author" content="Vaibhav Hajare" />
     <meta name="robots" content="index, follow" />
-    <meta name="theme-color" content="#0e0e10" />
-    <meta name="color-scheme" content="dark" />
+    <meta name="application-name" content="AI Website Builder" />
+    <meta name="apple-mobile-web-app-title" content="Website Builder" />
     <meta name="format-detection" content="telephone=no" />
+
+    <meta name="theme-color" content="#f5f2ec" />
+    <meta name="color-scheme" content="light dark" />
 
     <!--
       GitHub Pages cannot serve custom response headers, so the policy is also
-      declared here. Hosts that do support headers send the same policy in
-      _headers, vercel.json, and netlify.toml.
+      declared here. Hosts that support headers send the same policy in
+      public/_headers, vercel.json, and netlify.toml.
     -->
     <meta
       http-equiv="Content-Security-Policy"
-      content="default-src 'self'; base-uri 'self'; object-src 'none'; form-action 'self'; img-src 'self' data: blob: https:; font-src 'self' data: https://fonts.gstatic.com https://cdnjs.cloudflare.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; script-src 'self' 'unsafe-inline'; connect-src 'self' https://generativelanguage.googleapis.com https://api.openai.com https://openrouter.ai https://integrate.api.nvidia.com https://api.anthropic.com https:; manifest-src 'self'"
+      content="default-src 'self'; base-uri 'self'; object-src 'none'; form-action 'self'; img-src 'self' data: blob: https:; font-src 'self' data: https://fonts.gstatic.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; script-src 'self' 'unsafe-inline'; connect-src 'self' https://generativelanguage.googleapis.com https://api.openai.com https://openrouter.ai https://integrate.api.nvidia.com https://api.anthropic.com https:; manifest-src 'self'"
     />
 
+    <!-- Set the saved theme before the first paint, so dark mode never flashes. -->
+    <script>
+      (function () {
+        try {
+          var stored = localStorage.getItem('ai-website-builder:theme:v1');
+          var theme =
+            stored === 'light' || stored === 'dark'
+              ? stored
+              : window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches
+                ? 'dark'
+                : 'light';
+          document.documentElement.dataset.theme = theme;
+          document.documentElement.style.colorScheme = theme;
+          var themeColor = document.querySelector('meta[name="theme-color"]');
+          if (themeColor) {
+            themeColor.setAttribute('content', theme === 'dark' ? '#0d0b0a' : '#f5f2ec');
+          }
+        } catch (error) {}
+      })();
+    </script>
+
     <link rel="icon" type="image/svg+xml" href="./favicon.svg" />
-    <link rel="apple-touch-icon" href="./apple-touch-icon.png" />
+    <link rel="apple-touch-icon" sizes="180x180" href="./apple-touch-icon.png" />
     <link rel="manifest" href="./site.webmanifest" />
     <link rel="canonical" href="%SITE_URL%/" />
 
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="AI Website Builder" />
-    <meta property="og:title" content="AI Website Builder — Generate a website from a prompt" />
+    <meta property="og:locale" content="en_US" />
+    <meta property="og:title" content="AI Website Builder — Describe it. Watch it become a real website." />
     <meta
       property="og:description"
-      content="Describe a website in plain English and generate complete HTML, CSS, and JavaScript with live preview, conversational editing, and one-click ZIP export."
+      content="Generate complete, multi-page websites in HTML, React, Vue, or Next.js. Live preview, version history, custom-domain guides, and one-click publishing. Your key, your model, no backend."
     />
     <meta property="og:url" content="%SITE_URL%/" />
     <meta property="og:image" content="%SITE_URL%/og.png" />
+    <meta property="og:image:type" content="image/png" />
     <meta property="og:image:width" content="1200" />
     <meta property="og:image:height" content="630" />
     <meta
       property="og:image:alt"
-      content="The AI Website Builder interface: a chat panel on the left and a live preview on the right"
+      content="The AI Website Builder wordmark and a generated boutique-hotel site, under the headline 'Describe it. Watch it become a real website.'"
     />
     <meta name="twitter:card" content="summary_large_image" />
-    <meta name="twitter:title" content="AI Website Builder — Generate a website from a prompt" />
+    <meta name="twitter:title" content="AI Website Builder — Describe it. Watch it become a real website." />
     <meta
       name="twitter:description"
-      content="Prompt to website, with live preview and one-click export. Runs entirely in your browser."
+      content="A prompt-to-website studio with live multi-page preview, version history, and one-click publishing. Bring your own key."
     />
     <meta name="twitter:image" content="%SITE_URL%/og.png" />
+    <meta
+      name="twitter:image:alt"
+      content="AI Website Builder: a warm editorial landing page and a generated website preview."
+    />
 
     <script type="application/ld+json">
       {
         "@context": "https://schema.org",
         "@type": "WebApplication",
         "name": "AI Website Builder",
-        "description": "Generate complete HTML, CSS, and JavaScript websites from natural language, with live preview and one-click ZIP export.",
+        "description": "Generate complete, multi-page websites in HTML, React, Vue, or Next.js from a prompt, with live preview, version history, and one-click publishing.",
         "url": "%SITE_URL%/",
         "applicationCategory": "DeveloperApplication",
-        "keywords": "ai website builder, prompt to website, html css javascript generator, live preview, website generator, static site generator, gemini",
+        "applicationSubCategory": "Website Builder",
+        "softwareVersion": "3.0.0",
+        "keywords": "ai website builder, prompt to website, html css javascript generator, react generator, vue generator, nextjs generator, live preview, version history, custom domain, gemini, openai, openrouter, anthropic",
         "operatingSystem": "Any",
         "browserRequirements": "Requires JavaScript",
         "isAccessibleForFree": true,
@@ -69,6 +101,15 @@
           "price": "0",
           "priceCurrency": "USD"
         },
+        "featureList": [
+          "Prompt to complete website",
+          "Six AI provider options",
+          "Live multi-page preview",
+          "Version history with line diffs",
+          "Custom-domain DNS guides",
+          "One-click GitHub and Vercel publishing"
+        ],
+        "screenshot": "%SITE_URL%/og.png",
         "license": "https://www.gnu.org/licenses/gpl-3.0.html",
         "author": {
           "@type": "Person",
@@ -86,12 +127,12 @@
           max-width: 32rem;
           margin: 20vh auto;
           padding: 0 1.5rem;
-          color: #eceef1;
+          color: #17130f;
           font-family: system-ui, sans-serif;
           line-height: 1.6;
         "
       >
-        <h1 style="font-weight: 500">AI Website Builder</h1>
+        <h1 style="font-weight: 600; letter-spacing: -0.03em">AI Website Builder</h1>
         <p>
           This builder runs entirely in your browser and needs JavaScript. Enable it and reload
           to start building.

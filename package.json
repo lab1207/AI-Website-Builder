@@ -1,8 +1,8 @@
 {
   "name": "ai-website-builder",
   "private": true,
-  "version": "2.0.0",
-  "description": "Generate complete HTML, CSS, and JavaScript websites from a prompt, with live preview and one-click ZIP export.",
+  "version": "3.0.0",
+  "description": "A prompt-to-website studio with live multi-page preview, version history, six AI providers, and one-click publishing.",
   "type": "module",
   "license": "GPL-3.0-or-later",
   "author": "Vaibhav Hajare",
@@ -25,8 +25,8 @@
   },
   "dependencies": {
     "@fontsource-variable/fira-code": "^5.3.0",
-    "@fontsource-variable/inter": "^5.3.0",
-    "@fortawesome/fontawesome-free": "^7.3.1",
+    "@fontsource-variable/fraunces": "^5.3.0",
+    "@fontsource-variable/manrope": "^5.3.0",
     "@google/genai": "^2.30.0",
     "jszip": "^3.10.1",
     "react": "^19.2.0",

@@ -23,75 +23,261 @@ function headers(token: string, extra: Record<string, string> = {}) {
   };
 }
 
+export interface GitHubPublishOptions {
+  /** A website is meant to be public; Pages on a free account requires it. */
+  makePublic?: boolean;
+  /** Adds a CNAME file and attempts to attach the domain to Pages. */
+  customDomain?: string;
+  /** Set to false to push without touching the Pages configuration. */
+  enablePages?: boolean;
+}
+
+interface RepoInfo {
+  default_branch?: string;
+  private?: boolean;
+  html_url?: string;
+}
+
+function apiError(detail: string): string {
+  try {
+    const parsed = JSON.parse(detail) as { message?: string };
+    if (parsed.message) return parsed.message.slice(0, 180);
+  } catch {
+    // Not JSON; fall through to the raw slice.
+  }
+  return detail.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 180);
+}
+
 /**
- * Creates a repository and pushes every file to it.
+ * Creates (or updates) a repository, commits every file, and asks GitHub
+ * Pages to serve it.
+ *
+ * The Git data API needs three steps — tree, commit, ref update. Creating the
+ * tree alone, which an earlier version did, leaves the repository unchanged.
  */
 export async function publishToGitHub(
   token: string,
   owner: string,
   repo: string,
-  files: FileMap,
+  inputFiles: FileMap,
+  options: GitHubPublishOptions = {},
 ): Promise<PublishResult> {
   if (!token) return { ok: false, message: 'Add a GitHub token first.' };
   if (!owner || !repo) return { ok: false, message: 'Enter an owner and a repository name.' };
 
-  const base = `https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}`;
+  const repoName = repo.trim();
+  const domain = options.customDomain?.trim().toLowerCase() ?? '';
+  const files: FileMap = { ...inputFiles };
+
+  if (domain) {
+    // GitHub Pages reads this file directly from the root of the branch.
+    files['CNAME'] = `${domain}\n`;
+  }
+  if (!('.nojekyll' in files)) {
+    // Jekyll would otherwise ignore files and folders that start with an
+    // underscore, which is common in component-based builds.
+    files['.nojekyll'] = '\n';
+  }
+
+  const base = `https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repoName)}`;
 
   try {
-    // Does the repository already exist?
+    let repoInfo: RepoInfo | null = null;
+
     const existing = await fetch(base, { headers: headers(token) });
     if (existing.status === 404) {
       const created = await fetch(base, {
         method: 'POST',
         headers: headers(token, { 'Content-Type': 'application/json' }),
-        body: JSON.stringify({ name: repo, private: true, auto_init: true }),
+        body: JSON.stringify({
+          name: repoName,
+          private: options.makePublic === false,
+          auto_init: true,
+          description: 'Built with AI Website Builder',
+          ...(domain ? { homepage: `https://${domain}` } : {}),
+        }),
       });
+
       if (!created.ok) {
-        const detail = await created.text();
         return {
           ok: false,
-          message: `Could not create the repository (${created.status}). ${detail.slice(0, 160)}`,
+          message: `Could not create the repository (${created.status}). ${apiError(
+            await created.text(),
+          )}`,
         };
       }
+      repoInfo = (await created.json()) as RepoInfo;
     } else if (!existing.ok) {
-      return { ok: false, message: `Cannot reach that repository (${existing.status}).` };
-    }
-
-    // The branch the files land on.
-    const branchRes = await fetch(`${base}/branches/main`, { headers: headers(token) });
-    let branch = 'main';
-    if (branchRes.status === 404) {
-      const repoRes = await fetch(base, { headers: headers(token) });
-      const repo = (await repoRes.json()) as { default_branch?: string };
-      branch = repo.default_branch ?? 'main';
-    }
-
-    // A tree entry per file.
-    const tree = Object.entries(files).map(([path, content]) => ({
-      path,
-      mode: '100644',
-      type: 'blob',
-      content,
-    }));
-
-    const commit = await fetch(`${base}/git/trees`, {
-      method: 'POST',
-      headers: headers(token, { 'Content-Type': 'application/json' }),
-      body: JSON.stringify({ branch, tree }),
-    });
-
-    if (!commit.ok) {
-      const detail = await commit.text();
       return {
         ok: false,
-        message: `Could not write the files (${commit.status}). ${detail.slice(0, 160)}`,
+        message:
+          existing.status === 401
+            ? 'GitHub rejected that token. Create a new token with the repo scope.'
+            : `Cannot reach that repository (${existing.status}). ${apiError(
+                await existing.text(),
+              )}`,
+      };
+    } else {
+      repoInfo = (await existing.json()) as RepoInfo;
+    }
+
+    const branch = repoInfo?.default_branch || 'main';
+
+    // Find the parent commit, if the branch exists yet.
+    let parentSha: string | null = null;
+    const refResponse = await fetch(`${base}/git/ref/heads/${branch}`, {
+      headers: headers(token),
+    });
+    if (refResponse.ok) {
+      const ref = (await refResponse.json()) as { object?: { sha?: string } };
+      parentSha = ref.object?.sha ?? null;
+    } else if (refResponse.status !== 404) {
+      return {
+        ok: false,
+        message: `Could not read the branch (${refResponse.status}). ${apiError(
+          await refResponse.text(),
+        )}`,
+      };
+    }
+
+    // 1. The tree: every generated file, as blobs.
+    const treeResponse = await fetch(`${base}/git/trees`, {
+      method: 'POST',
+      headers: headers(token, { 'Content-Type': 'application/json' }),
+      body: JSON.stringify({
+        tree: Object.entries(files).map(([path, content]) => ({
+          path,
+          mode: '100644',
+          type: 'blob',
+          content,
+        })),
+      }),
+    });
+
+    if (!treeResponse.ok) {
+      return {
+        ok: false,
+        message: `Could not write the files (${treeResponse.status}). ${apiError(
+          await treeResponse.text(),
+        )}`,
+      };
+    }
+    const tree = (await treeResponse.json()) as { sha?: string };
+    if (!tree.sha) return { ok: false, message: 'GitHub returned no tree for the commit.' };
+
+    // 2. The commit that points at the tree.
+    const commitResponse = await fetch(`${base}/git/commits`, {
+      method: 'POST',
+      headers: headers(token, { 'Content-Type': 'application/json' }),
+      body: JSON.stringify({
+        message: 'Build with AI Website Builder',
+        tree: tree.sha,
+        parents: parentSha ? [parentSha] : [],
+      }),
+    });
+
+    if (!commitResponse.ok) {
+      return {
+        ok: false,
+        message: `Could not create the commit (${commitResponse.status}). ${apiError(
+          await commitResponse.text(),
+        )}`,
+      };
+    }
+    const commit = (await commitResponse.json()) as { sha?: string };
+    if (!commit.sha) return { ok: false, message: 'GitHub returned no commit.' };
+
+    // 3. Move the branch. An empty repository needs the ref created instead.
+    if (parentSha) {
+      const update = await fetch(`${base}/git/refs/heads/${branch}`, {
+        method: 'PATCH',
+        headers: headers(token, { 'Content-Type': 'application/json' }),
+        body: JSON.stringify({ sha: commit.sha, force: false }),
+      });
+      if (!update.ok) {
+        return {
+          ok: false,
+          message: `Could not update ${branch} (${update.status}). ${apiError(
+            await update.text(),
+          )}`,
+        };
+      }
+    } else {
+      const createRef = await fetch(`${base}/git/refs`, {
+        method: 'POST',
+        headers: headers(token, { 'Content-Type': 'application/json' }),
+        body: JSON.stringify({ ref: `refs/heads/${branch}`, sha: commit.sha }),
+      });
+      if (!createRef.ok) {
+        return {
+          ok: false,
+          message: `Could not create the branch (${createRef.status}). ${apiError(
+            await createRef.text(),
+          )}`,
+        };
+      }
+    }
+
+    const count = Object.keys(files).length;
+    const repoUrl = repoInfo?.html_url ?? `https://github.com/${owner}/${repoName}`;
+    let pagesEnabled = false;
+    let pagesUrl = '';
+
+    // Pages is best-effort: a token without the right scope, a private repo on
+    // a free plan, or an org policy can all say no. The push still succeeded.
+    if (options.enablePages !== false) {
+      try {
+        const pagesResponse = await fetch(`${base}/pages`, {
+          method: 'POST',
+          headers: headers(token, { 'Content-Type': 'application/json' }),
+          body: JSON.stringify({ source: { branch, path: '/' } }),
+        });
+
+        pagesEnabled = pagesResponse.ok || pagesResponse.status === 409;
+        if (!pagesEnabled) {
+          // 422/404 usually means Pages already exists or is unavailable.
+          const current = await fetch(`${base}/pages`, { headers: headers(token) });
+          pagesEnabled = current.ok;
+        }
+
+        if (pagesEnabled && domain) {
+          await fetch(`${base}/pages`, {
+            method: 'PUT',
+            headers: headers(token, { 'Content-Type': 'application/json' }),
+            body: JSON.stringify({ cname: domain, https_enforced: true }),
+          });
+        }
+
+        const published = await fetch(`${base}/pages`, { headers: headers(token) });
+        if (published.ok) {
+          const payload = (await published.json()) as { html_url?: string };
+          pagesUrl =
+            payload.html_url ??
+            (domain
+              ? `https://${domain}`
+              : owner.toLowerCase() === `${repoName.toLowerCase()}.github.io`
+                ? `https://${owner.toLowerCase()}.github.io/`
+                : `https://${owner.toLowerCase()}.github.io/${repoName}/`);
+        }
+      } catch {
+        pagesEnabled = false;
+      }
+    }
+
+    if (pagesEnabled) {
+      return {
+        ok: true,
+        message: domain
+          ? `Pushed ${count} files and attached ${domain}. Pages is building — DNS can take a little while.`
+          : `Pushed ${count} files. GitHub Pages is building the site now.`,
+        url: pagesUrl || repoUrl,
       };
     }
 
     return {
       ok: true,
-      message: `Pushed ${Object.keys(files).length} files to ${owner}/${repo}.`,
-      url: `https://github.com/${owner}/${repo}`,
+      message: `Pushed ${count} files to ${owner}/${repoName}. To make it live, enable Pages in the repository settings (Branch: ${branch}, folder: /).`,
+      url: repoUrl,
     };
   } catch (error) {
     return { ok: false, message: `Network error: ${(error as Error).message}` };

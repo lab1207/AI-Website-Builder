@@ -51,7 +51,7 @@ A key committed to this repository is exposed to everyone who can see it, and st
 
 1. **A CI test that fails the build.** `src/lib/secrets.test.ts` scans every tracked file on every push for the key shapes of every supported provider — Gemini (`AIza…`), OpenAI (`sk-proj-…`), OpenRouter (`sk-or-…`), NVIDIA (`nvapi-…`), Anthropic (`sk-ant-…`), GitHub tokens (`ghp_…`, `github_pat_…`), and Figma tokens (`figd_…`). A match turns the CI run red, and the commit does not deploy.
 2. **GitHub push protection.** Secret scanning and push protection are enabled on this repository, so GitHub itself blocks a push that carries a recognised token before it lands.
-3. **Nothing reads keys from source.** The only key input is the environment: `VITE_GEMINI_API_KEY` at build time, and the visitor's own key at runtime, stored in their browser. `.gitignore` excludes `.env` and `.env.*`, and `.env.example` documents the variable with no value attached.
+3. **Nothing reads keys from source.** The only key inputs are `VITE_GEMINI_API_KEY` at build time and the visitor's own key at runtime, stored in their browser. `.gitignore` excludes `.env` and `.env.*`, and `.env.example` documents the variable with no value attached.
 
 If you believe a key has been committed, treat it as compromised: revoke it at the provider first, then report it privately as above.
 
@@ -67,8 +67,8 @@ Because the frame has an opaque origin, `localStorage` is unavailable to it. The
 
 ## About the Content-Security-Policy
 
-The shipped policy allows `'unsafe-inline'` for scripts and styles, and permits images and fonts from any HTTPS host.
+The shipped policy allows `'unsafe-inline'` for scripts and styles, permits images from HTTPS hosts, and keeps Google Fonts available for generated sites. `connect-src` allows the five named provider APIs and any HTTPS endpoint, because the studio supports a custom OpenAI-compatible base URL.
 
-This is deliberate. The preview is the product, and generated websites routinely use inline `<script>` tags, inline styles, and CDN-hosted fonts and icons. A `srcdoc` frame inherits the parent document's policy, and a single-origin static deployment has no separate origin to relax it, so a policy strict enough to block inline scripts would also block the preview from running at all.
+This is deliberate. The preview is the product, and generated websites routinely use inline `<script>` tags, inline styles, and CDN-hosted images and fonts. A `srcdoc` frame inherits the parent document's policy, and a single-origin static deployment has no separate origin to relax it, so a policy strict enough to block inline scripts would also block the preview from running at all.
 
-The protection that matters for generated content is the sandbox, not the policy: the preview runs in an opaque origin and cannot reach the builder's window, storage, or API key. The app itself never renders generated HTML into its own document, so it has no injection surface of its own. The policy still locks down `object-src`, `base-uri`, `frame-ancestors`, and `form-action`, and restricts `connect-src` to the Gemini API.
+The protection that matters for generated content is the sandbox, not the policy: the preview runs in an opaque origin and cannot reach the builder's window, storage, or API key. The app itself never renders generated HTML into its own document, so it has no injection surface of its own. The policy still locks down `object-src`, `base-uri`, `frame-ancestors`, and `form-action`, and keeps all other network access on HTTPS.

@@ -3,6 +3,7 @@ import {
   PROVIDERS,
   baseUrlFor,
   getProvider,
+  isFallbackModelList,
   isProviderId,
   ProviderError,
 } from './providers';
@@ -104,5 +105,22 @@ describe('ProviderError', () => {
     expect(error.message).toBe('Rate limit reached.');
     expect(error.status).toBe(429);
     expect(error.name).toBe('ProviderError');
+  });
+});
+
+describe('isFallbackModelList', () => {
+  it('recognises a copied fallback list by value, not by array identity', () => {
+    const fallback = getProvider('gemini').fallbackModels;
+    const copy = fallback.map((model) => ({ ...model }));
+    expect(isFallbackModelList('gemini', copy)).toBe(true);
+  });
+
+  it('treats a key-specific list as live', () => {
+    expect(
+      isFallbackModelList('openai', [
+        { value: 'gpt-5.2', label: 'GPT-5.2' },
+        { value: 'gpt-5.2-mini', label: 'gpt-5.2-mini' },
+      ]),
+    ).toBe(false);
   });
 });

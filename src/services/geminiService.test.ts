@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { parseGeneratedFiles } from './geminiService';
+import { parseGeneratedFiles } from '../lib/generation';
 
 describe('parseGeneratedFiles', () => {
   it('returns an empty map when there are no file markers', () => {

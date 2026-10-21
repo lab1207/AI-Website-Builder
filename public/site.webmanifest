@@ -1,13 +1,15 @@
 {
+  "id": "./",
   "name": "AI Website Builder",
-  "short_name": "Site Builder",
-  "description": "Generate complete HTML, CSS, and JavaScript websites from a prompt, with live preview and one-click ZIP export.",
+  "short_name": "Website Builder",
+  "description": "A prompt-to-website studio with live multi-page preview, version history, and one-click publishing.",
+  "lang": "en",
   "start_url": ".",
   "scope": ".",
   "display": "standalone",
-  "background_color": "#0e0e10",
-  "theme_color": "#0e0e10",
-  "categories": ["developer", "productivity", "utilities"],
+  "background_color": "#f5f2ec",
+  "theme_color": "#f5f2ec",
+  "categories": ["developer", "productivity", "design", "utilities"],
   "icons": [
     {
       "src": "./favicon.svg",

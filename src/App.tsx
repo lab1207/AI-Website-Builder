@@ -1,20 +1,25 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import ChatPanel from './components/ChatPanel';
-import PreviewPane from './components/PreviewPane';
-import SettingsPanel from './components/SettingsPanel';
+import DashboardHome from './components/DashboardHome';
 import HistoryPanel from './components/HistoryPanel';
+import LandingPage from './components/LandingPage';
+import ModelPicker from './components/ModelPicker';
+import PreviewPane from './components/PreviewPane';
 import PublishPanel from './components/PublishPanel';
-import AppHeader from './components/AppHeader';
-import {
-  parseGeneratedFiles,
-  DEFAULT_SYSTEM_INSTRUCTION,
-  resetChat,
-} from './services/geminiService';
+import SettingsPanel from './components/SettingsPanel';
+import Sidebar from './components/Sidebar';
+import TopBar from './components/TopBar';
+import Toast, { type ToastState, type ToastTone } from './components/Toast';
+import ConfirmDialog from './components/ConfirmDialog';
+import Icon from './components/Icon';
+import { DEFAULT_SYSTEM_INSTRUCTION, parseGeneratedFiles } from './lib/generation';
 import { Message, ViewMode, Attachment, FileMap, RunSettings, DeviceType } from './types';
 import { useProvider } from './hooks/useProvider';
 import { sendChat, getProvider } from './lib/providers';
+import type { ProviderId } from './lib/providers';
 import {
   ProjectType,
+  SiteMode,
   Styling,
   projectTypeInstruction,
   scaffoldFor,
@@ -27,11 +32,32 @@ import {
   writeHistory,
 } from './lib/versionHistory';
 
-
-const generateId = () => Math.random().toString(36).substring(2, 15);
+/* --------------------------------------------------------------------------
+ * Storage
+ * ------------------------------------------------------------------------ */
 
 const STORAGE_THEME = 'ai-website-builder:theme:v1';
 const STORAGE_PROJECT = 'ai-website-builder:project-name:v1';
+const STORAGE_WORKSPACE = 'ai-website-builder:workspace:v1';
+const STORAGE_VISITED = 'ai-website-builder:visited:v1';
+
+type PanelName = 'settings' | 'history' | 'publish';
+
+interface WorkspaceState {
+  files: FileMap;
+  projectName: string;
+  projectType: ProjectType;
+  styling: Styling;
+  siteMode: SiteMode;
+  customDomain: string;
+}
+
+const generateId = () => Math.random().toString(36).substring(2, 15);
+
+/** Load the Gemini module only when its in-memory chat session needs clearing. */
+function resetChatSession() {
+  void import('./services/geminiService').then(({ resetChat }) => resetChat());
+}
 
 function readStoredTheme(): 'light' | 'dark' {
   try {
@@ -43,35 +69,144 @@ function readStoredTheme(): 'light' | 'dark' {
   return window.matchMedia?.('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
 }
 
-function readStoredProjectName(): string {
+function readVisited(): boolean {
   try {
-    return window.localStorage.getItem(STORAGE_PROJECT) ?? 'Untitled project';
+    return window.localStorage.getItem(STORAGE_VISITED) === '1';
   } catch {
-    return 'Untitled project';
+    return false;
   }
 }
 
+const PROJECT_TYPE_VALUES: ProjectType[] = ['vanilla', 'react', 'vue', 'next'];
+
+/**
+ * Restores the working files, not the conversation. The conversation is
+ * rebuilt from the files as one assistant message, which also means the model
+ * gets the current code as context on the very next request.
+ */
+function readWorkspace(): WorkspaceState | null {
+  try {
+    const raw = window.localStorage.getItem(STORAGE_WORKSPACE);
+    const fallbackName = window.localStorage.getItem(STORAGE_PROJECT) ?? 'Untitled project';
+
+    if (!raw) {
+      return {
+        files: {},
+        projectName: fallbackName,
+        projectType: 'vanilla',
+        styling: 'vanilla',
+        siteMode: 'single',
+        customDomain: '',
+      };
+    }
+
+    const parsed = JSON.parse(raw) as Partial<WorkspaceState>;
+    const files =
+      parsed.files && typeof parsed.files === 'object' && !Array.isArray(parsed.files)
+        ? (parsed.files as FileMap)
+        : {};
+    const projectType = PROJECT_TYPE_VALUES.includes(parsed.projectType as ProjectType)
+      ? (parsed.projectType as ProjectType)
+      : 'vanilla';
+
+    return {
+      files,
+      projectName:
+        typeof parsed.projectName === 'string' && parsed.projectName.trim()
+          ? parsed.projectName
+          : fallbackName,
+      projectType,
+      styling:
+        parsed.styling === 'tailwind' && projectType !== 'vanilla' ? 'tailwind' : 'vanilla',
+      siteMode: parsed.siteMode === 'multi' ? 'multi' : 'single',
+      customDomain: typeof parsed.customDomain === 'string' ? parsed.customDomain : '',
+    };
+  } catch {
+    return null;
+  }
+}
+
+function writeWorkspace(state: WorkspaceState) {
+  try {
+    window.localStorage.setItem(STORAGE_WORKSPACE, JSON.stringify(state));
+  } catch {
+    // A very large project can exceed the quota. The session keeps working.
+  }
+}
+
+function filesAsContext(files: FileMap): string {
+  return Object.entries(files)
+    .map(([name, content]) => `__FILE: ${name}__\n${content}`)
+    .join('\n\n');
+}
+
+function versionLabel(prompt: string): string {
+  const clean = prompt
+    .replace(/\n\n\[CONTEXT:[\s\S]*$/, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+  if (!clean) return 'Generated';
+  return clean.length > 64 ? `${clean.slice(0, 61)}…` : clean;
+}
+
+/* --------------------------------------------------------------------------
+ * App
+ * ------------------------------------------------------------------------ */
+
 const App: React.FC = () => {
-  const [messages, setMessages] = useState<Message[]>([]);
+  const initialWorkspace = useMemo(readWorkspace, []);
+  const restoredFileCount = initialWorkspace ? Object.keys(initialWorkspace.files).length : 0;
+
+  const [showLanding, setShowLanding] = useState(
+    () => !readVisited() && restoredFileCount === 0,
+  );
+  const [theme, setTheme] = useState<'light' | 'dark'>(readStoredTheme);
+
+  const [messages, setMessages] = useState<Message[]>(() => {
+    if (!initialWorkspace || Object.keys(initialWorkspace.files).length === 0) return [];
+    return [
+      {
+        id: generateId(),
+        role: 'assistant',
+        content: `Restored ${Object.keys(initialWorkspace.files).length} files from your last session.\n\n${filesAsContext(
+          initialWorkspace.files,
+        )}`,
+        timestamp: Date.now(),
+        latency: 0,
+      },
+    ];
+  });
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const [currentFiles, setCurrentFiles] = useState<FileMap>({});
+  const [currentFiles, setCurrentFiles] = useState<FileMap>(initialWorkspace?.files ?? {});
   const [viewMode, setViewMode] = useState<ViewMode>(ViewMode.SPLIT);
   const [systemInstruction, setSystemInstruction] = useState('');
   const [isThinking, setIsThinking] = useState(false);
-
   const [isAnnotating, setIsAnnotating] = useState(false);
   const [pendingAnnotations, setPendingAnnotations] = useState<Array<{ x: number; y: number }>>([]);
-
   const [previewDevice, setPreviewDevice] = useState<DeviceType>('desktop');
 
-  const [theme, setTheme] = useState<'light' | 'dark'>(readStoredTheme);
-  const [projectName, setProjectName] = useState<string>(readStoredProjectName);
-  const [projectType, setProjectType] = useState<ProjectType>('vanilla');
-  const [styling, setStyling] = useState<Styling>('vanilla');
+  const [projectName, setProjectName] = useState(
+    initialWorkspace?.projectName ?? 'Untitled project',
+  );
+  const [projectType, setProjectType] = useState<ProjectType>(
+    initialWorkspace?.projectType ?? 'vanilla',
+  );
+  const [styling, setStyling] = useState<Styling>(initialWorkspace?.styling ?? 'vanilla');
+  const [siteMode, setSiteMode] = useState<SiteMode>(initialWorkspace?.siteMode ?? 'single');
+  const [customDomain, setCustomDomain] = useState(initialWorkspace?.customDomain ?? '');
 
-  const [panel, setPanel] = useState<'none' | 'settings' | 'history' | 'publish'>('none');
+  const [showHome, setShowHome] = useState(
+    () =>
+      !initialWorkspace || Object.keys(initialWorkspace.files).length === 0,
+  );
+  const [panel, setPanel] = useState<'none' | PanelName>('none');
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [isPublishing, setIsPublishing] = useState(false);
+  const [toast, setToast] = useState<ToastState | null>(null);
+
+  const [confirmNew, setConfirmNew] = useState(false);
+  const [confirmHistory, setConfirmHistory] = useState(false);
 
   const [runSettings, setRunSettings] = useState<RunSettings>({
     model: getProvider('gemini').defaultModel,
@@ -84,8 +219,8 @@ const App: React.FC = () => {
   const [versions, setVersions] = useState<VersionSnapshot[]>([]);
 
   const abortControllerRef = useRef<AbortController | null>(null);
+  const activeAssistantRef = useRef<string | null>(null);
   const projectInputRef = useRef<HTMLInputElement>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const {
     provider,
@@ -102,8 +237,17 @@ const App: React.FC = () => {
     savedProviders,
   } = useProvider();
 
+  const notify = useCallback((message: string, tone: ToastTone = 'info') => {
+    setToast({ id: Date.now(), message, tone });
+  }, []);
+
+  /* Chrome ---------------------------------------------------------------- */
+
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
+    document.documentElement.style.colorScheme = theme;
+    const themeColor = document.querySelector('meta[name="theme-color"]');
+    themeColor?.setAttribute('content', theme === 'dark' ? '#0d0b0a' : '#f5f2ec');
     try {
       window.localStorage.setItem(STORAGE_THEME, theme);
     } catch {
@@ -112,16 +256,60 @@ const App: React.FC = () => {
   }, [theme]);
 
   useEffect(() => {
+    document.title = showLanding
+      ? 'AI Website Builder — Describe it. Watch it become a real website.'
+      : `${projectName || 'Untitled project'} · AI Website Builder`;
     try {
       window.localStorage.setItem(STORAGE_PROJECT, projectName);
     } catch {
       // Not important enough to fail on.
     }
-  }, [projectName]);
+  }, [projectName, showLanding]);
+
+  useEffect(() => {
+    if (!toast) return;
+    const timer = window.setTimeout(() => setToast(null), 4200);
+    return () => window.clearTimeout(timer);
+  }, [toast]);
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape' && panel !== 'none') setPanel('none');
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [panel]);
+
+  // Persist the working files and project choices, debounced so streaming
+  // chunks do not write to storage dozens of times a second.
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      writeWorkspace({
+        files: currentFiles,
+        projectName,
+        projectType,
+        styling,
+        siteMode,
+        customDomain,
+      });
+    }, 600);
+    return () => window.clearTimeout(timer);
+  }, [currentFiles, projectName, projectType, styling, siteMode, customDomain]);
 
   useEffect(() => {
     setVersions(readHistory());
   }, []);
+
+  // A provider change means the old model id is meaningless there.
+  useEffect(() => {
+    setRunSettings((previous) =>
+      previous.model === providerDefinition.defaultModel
+        ? previous
+        : { ...previous, model: providerDefinition.defaultModel },
+    );
+  }, [providerDefinition.defaultModel]);
+
+  /* Versions -------------------------------------------------------------- */
 
   const pushVersion = useCallback((files: FileMap, label: string, prompt?: string) => {
     if (Object.keys(files).length === 0) return;
@@ -139,28 +327,35 @@ const App: React.FC = () => {
     });
   }, []);
 
+  /* Sending --------------------------------------------------------------- */
+
   const handleSendMessage = useCallback(
     async (attachments: Attachment[] = [], overrideInput?: string) => {
-      let textToSend = overrideInput || input;
+      if (isLoading) return;
 
-      let contextData = '';
-
-      if (!overrideInput && pendingAnnotations.length > 0) {
-        contextData += pendingAnnotations
-          .map(
-            (annotation) =>
-              `[CONTEXT: User clicked at screen coordinates ${annotation.x}% horizontal, ${annotation.y}% vertical]`,
-          )
-          .join('\n');
+      if (provider !== 'custom' && !hasKey) {
+        setPanel('settings');
+        notify(`Add a ${providerDefinition.label} key to start building.`, 'info');
+        return;
       }
 
-      contextData += `\n[CONTEXT: User is currently viewing the app in ${previewDevice.toUpperCase()} mode.]`;
+      let textToSend = (overrideInput ?? input).trimEnd();
+      const hasAnnotations = !overrideInput && pendingAnnotations.length > 0;
 
-      if (contextData) {
-        textToSend = `${textToSend}\n\n${contextData}`;
+      if (!textToSend.trim() && attachments.length === 0 && !hasAnnotations) return;
+
+      const context: string[] = [];
+      if (hasAnnotations) {
+        for (const annotation of pendingAnnotations) {
+          context.push(
+            `[CONTEXT: User clicked ${Math.round(annotation.x)}% across and ${Math.round(
+              annotation.y,
+            )}% down the preview. Pay special attention to that region.]`,
+          );
+        }
       }
-
-      if ((!textToSend.trim() && attachments.length === 0) || isLoading) return;
+      context.push(`[CONTEXT: The preview is being viewed in ${previewDevice.toUpperCase()} mode.]`);
+      textToSend = `${textToSend}\n\n${context.join('\n')}`.trim();
 
       const userMessage: Message = {
         id: generateId(),
@@ -171,13 +366,16 @@ const App: React.FC = () => {
       };
 
       setMessages((previous) => [...previous, userMessage]);
+      setShowHome(false);
       if (!overrideInput) {
         setInput('');
         setPendingAnnotations([]);
+        setIsAnnotating(false);
       }
       setIsLoading(true);
 
       const assistantMessageId = generateId();
+      activeAssistantRef.current = assistantMessageId;
       const startTime = Date.now();
 
       setMessages((previous) => [
@@ -189,7 +387,7 @@ const App: React.FC = () => {
 
       const instruction = [
         DEFAULT_SYSTEM_INSTRUCTION,
-        projectTypeInstruction(projectType, styling),
+        projectTypeInstruction(projectType, styling, siteMode),
         systemInstruction.trim() ? `EXTRA INSTRUCTIONS:\n${systemInstruction.trim()}` : '',
       ]
         .filter(Boolean)
@@ -226,9 +424,7 @@ const App: React.FC = () => {
             );
 
             const files = parseGeneratedFiles(accumulatedText);
-            if (Object.keys(files).length > 0) {
-              setCurrentFiles(files);
-            }
+            if (Object.keys(files).length > 0) setCurrentFiles(files);
           },
         });
 
@@ -241,41 +437,57 @@ const App: React.FC = () => {
 
         const files = parseGeneratedFiles(accumulatedText);
         if (Object.keys(files).length > 0) {
-          pushVersion(files, 'Generated', textToSend);
+          pushVersion(files, versionLabel(textToSend), textToSend);
+          setCurrentFiles(files);
         }
       } catch (error) {
         const failure = error as Error;
         if (failure.name !== 'AbortError') {
-          const message =
-            failure.message && failure.message.toLowerCase().includes('api key')
-              ? `Error: ${failure.message}`
-              : 'Error: Could not reach the Gemini API. Check your key and your connection.';
-
-          setMessages((previous) => [
-            ...previous,
-            { id: generateId(), role: 'assistant', content: message, timestamp: Date.now() },
-          ]);
+          const detail = failure.message?.trim();
+          const message = detail
+            ? `Error: ${detail}`
+            : `Error: Could not reach ${providerDefinition.label}. Check your key and your connection.`;
+          setMessages((previous) =>
+            previous.map((item) =>
+              item.id === assistantMessageId
+                ? { ...item, content: message, latency: Date.now() - startTime }
+                : item,
+            ),
+          );
+        } else {
+          setMessages((previous) =>
+            previous.map((item) =>
+              item.id === assistantMessageId && !item.content
+                ? { ...item, content: 'Stopped before the model answered.' }
+                : item,
+            ),
+          );
         }
       } finally {
         setIsLoading(false);
+        activeAssistantRef.current = null;
         abortControllerRef.current = null;
       }
     },
     [
+      apiKey,
+      customBaseUrl,
+      hasKey,
       input,
+      isThinking,
       isLoading,
       messages,
-      systemInstruction,
-      isThinking,
-      runSettings,
       pendingAnnotations,
       previewDevice,
       projectType,
-      styling,
-      apiKey,
       provider,
-      customBaseUrl,
+      providerDefinition.label,
       pushVersion,
+      runSettings,
+      siteMode,
+      styling,
+      systemInstruction,
+      notify,
     ],
   );
 
@@ -285,12 +497,91 @@ const App: React.FC = () => {
     setIsLoading(false);
   };
 
-  const handleClearChat = () => {
+  /* New project ----------------------------------------------------------- */
+
+  const performNewProject = useCallback(() => {
+    abortControllerRef.current?.abort();
     setMessages([]);
     setCurrentFiles({});
-    resetChat();
+    setInput('');
     setPendingAnnotations([]);
-    abortControllerRef.current?.abort();
+    setIsAnnotating(false);
+    setIsLoading(false);
+    setShowHome(true);
+    setPanel('none');
+    setMobileNavOpen(false);
+    setViewMode(ViewMode.SPLIT);
+    setProjectName('Untitled project');
+    setCustomDomain('');
+    resetChatSession();
+    setConfirmNew(false);
+    notify('A blank canvas. Describe what you want to build.', 'success');
+    window.setTimeout(() => {
+      document.querySelector<HTMLTextAreaElement>('#composer-input')?.focus();
+    }, 80);
+  }, [notify]);
+
+  const requestNewProject = useCallback(() => {
+    if (messages.length === 0 && Object.keys(currentFiles).length === 0) {
+      performNewProject();
+      return;
+    }
+    setMobileNavOpen(false);
+    setConfirmNew(true);
+  }, [currentFiles, messages.length, performNewProject]);
+
+  const handleRestoreVersion = (version: VersionSnapshot) => {
+    if (Object.keys(currentFiles).length > 0) {
+      pushVersion(currentFiles, 'Before restore');
+    }
+    setCurrentFiles({ ...version.files });
+    setMessages((previous) => [
+      ...previous,
+      {
+        id: generateId(),
+        role: 'assistant',
+        content: `Restored “${version.label}” from ${new Date(
+          version.createdAt,
+        ).toLocaleString()}.\n\n${filesAsContext(version.files)}`,
+        timestamp: Date.now(),
+      },
+    ]);
+    setShowHome(false);
+    notify('Version restored. Your conversation is still here.', 'success');
+  };
+
+  const handleClearHistory = () => {
+    clearHistory();
+    setVersions([]);
+    setConfirmHistory(false);
+    notify('Version history cleared.', 'success');
+  };
+
+  /* Import ---------------------------------------------------------------- */
+
+  const detectImportedDetails = (files: FileMap) => {
+    const packageFile = files['package.json'];
+    if (!packageFile) return { type: 'vanilla' as ProjectType, styling: 'vanilla' as Styling };
+
+    try {
+      const parsed = JSON.parse(packageFile) as {
+        dependencies?: Record<string, string>;
+        devDependencies?: Record<string, string>;
+      };
+      const dependencies = { ...parsed.dependencies, ...parsed.devDependencies };
+      const type: ProjectType = dependencies.next
+        ? 'next'
+        : dependencies.vue
+          ? 'vue'
+          : dependencies.react
+            ? 'react'
+            : 'vanilla';
+      const styling: Styling =
+        type !== 'vanilla' && dependencies.tailwindcss ? 'tailwind' : 'vanilla';
+      return { type, styling };
+    } catch {
+      return { type: 'vanilla' as ProjectType, styling: 'vanilla' as Styling };
+    }
   };
 
   const handleProjectFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -300,95 +591,99 @@ const App: React.FC = () => {
     const newFiles: FileMap = {};
 
     try {
-      if (file.name.endsWith('.zip')) {
+      if (file.name.toLowerCase().endsWith('.zip')) {
         const { default: JSZip } = await import('jszip');
-        const zip = new JSZip();
-        const loaded = await zip.loadAsync(file);
+        const zip = await JSZip.loadAsync(file);
+        const entries = Object.values(zip.files).filter(
+          (entry) =>
+            !entry.dir &&
+            !entry.name.startsWith('__MACOSX') &&
+            !entry.name.includes('/.DS_Store') &&
+            entry.name !== '.DS_Store',
+        );
 
-        for (const filename of Object.keys(loaded.files)) {
-          if (!loaded.files[filename].dir && !filename.startsWith('__MACOSX')) {
-            newFiles[filename] = await loaded.files[filename].async('string');
-          }
+        // Archives are usually zipped from a folder. Strip that one shared
+        // root so index.html ends up where the preview expects it.
+        const paths = entries.map((entry) => entry.name);
+        const roots = new Set(paths.map((path) => path.split('/')[0]));
+        const sharedRoot =
+          roots.size === 1 && paths.every((path) => path.includes('/'))
+            ? `${[...roots][0]}/`
+            : '';
+
+        for (const entry of entries) {
+          const name = sharedRoot ? entry.name.slice(sharedRoot.length) : entry.name;
+          if (!name) continue;
+          newFiles[name] = await entry.async('string');
         }
-      } else if (file.name.endsWith('.html')) {
-        const content = await file.text();
-        newFiles[file.name] = content;
-        if (file.name !== 'index.html' && !newFiles['index.html']) {
-          newFiles['index.html'] = content;
-        }
+      } else if (file.name.toLowerCase().endsWith('.html')) {
+        newFiles['index.html'] = await file.text();
       }
 
-      if (Object.keys(newFiles).length > 0) {
-        setCurrentFiles(newFiles);
-        pushVersion(newFiles, 'Imported');
-
-        let contextMessage = '';
-        for (const [name, content] of Object.entries(newFiles)) {
-          contextMessage += `__FILE: ${name}__\n${content}\n\n`;
-        }
-
-        setMessages((previous) => [
-          ...previous,
-          {
-            id: generateId(),
-            role: 'user',
-            content: `I have imported the project files (${Object.keys(newFiles).join(', ')}). Use this as the current state.`,
-            timestamp: Date.now(),
-          },
-          {
-            id: generateId(),
-            role: 'assistant',
-            content: contextMessage,
-            timestamp: Date.now(),
-            latency: 0,
-          },
-        ]);
+      if (Object.keys(newFiles).length === 0) {
+        notify('That file had nothing to import.', 'error');
+        return;
       }
-    } catch {
+
+      const detected = detectImportedDetails(newFiles);
+      const importedCount = Object.keys(newFiles).length;
+
+      setCurrentFiles(newFiles);
+      setProjectType(detected.type);
+      setStyling(detected.styling);
+      if (!projectName.trim() || projectName === 'Untitled project') {
+        setProjectName(file.name.replace(/\.(zip|html)$/i, '').replace(/[-_]+/g, ' '));
+      }
+      pushVersion(newFiles, `Imported ${importedCount} files`);
       setMessages((previous) => [
         ...previous,
         {
           id: generateId(),
-          role: 'assistant',
-          content: 'Error: Could not read that project file.',
+          role: 'user',
+          content: `I imported a project called “${file.name}” (${importedCount} files). Use these files as the current state.`,
           timestamp: Date.now(),
         },
+        {
+          id: generateId(),
+          role: 'assistant',
+          content: `Imported ${importedCount} files: ${Object.keys(newFiles)
+            .slice(0, 12)
+            .join(', ')}${importedCount > 12 ? '…' : ''}.\n\n${filesAsContext(newFiles)}`,
+          timestamp: Date.now(),
+          latency: 0,
+        },
       ]);
+      setShowHome(false);
+      setViewMode(ViewMode.SPLIT);
+      notify(`Imported ${importedCount} files.`, 'success');
+    } catch {
+      notify('Could not read that project file.', 'error');
+    } finally {
+      if (projectInputRef.current) projectInputRef.current.value = '';
     }
-
-    if (projectInputRef.current) projectInputRef.current.value = '';
   };
 
+  /* Preview helpers ------------------------------------------------------- */
+
   const handleAutoFix = () => {
-    handleSendMessage(
+    void handleSendMessage(
       [],
-      'Review the current code for any syntax errors, broken links, missing accessibility attributes, or responsive layout problems, and fix them. Keep the existing design and structure.',
+      'Review the current code for syntax errors, broken links, missing accessibility attributes, and responsive layout problems. Fix them. Keep the existing design and structure.',
     );
   };
 
   const handleExplain = () => {
-    handleSendMessage(
+    void handleSendMessage(
       [],
       'Explain the current code. Cover what each file does, how the pieces fit together, and anything a newcomer should be careful about. Do not rewrite the code.',
     );
   };
 
-  const handleRestoreVersion = (version: VersionSnapshot) => {
-    setCurrentFiles({ ...version.files });
-    setMessages((previous) => [
-      ...previous,
-      {
-        id: generateId(),
-        role: 'assistant',
-        content: `Restored the version from ${new Date(version.createdAt).toLocaleString()}.`,
-        timestamp: Date.now(),
-      },
-    ]);
-  };
-
-  const handleClearHistory = () => {
-    clearHistory();
-    setVersions([]);
+  const handleGenerateFrameworkPreview = () => {
+    void handleSendMessage(
+      [],
+      'Add a self-contained preview.html at the project root that faithfully shows the current design using plain HTML, CSS, and JavaScript. Do not change any other file. It must not import React, Vue, Next.js, Tailwind, or any external script.',
+    );
   };
 
   const handleFigmaImport = (images: Array<{ name: string; dataUrl: string }>) => {
@@ -399,88 +694,189 @@ const App: React.FC = () => {
     }));
 
     setInput(
-      `Build a website that matches these Figma designs${images.length === 1 ? '' : 's'} exactly.`,
+      `Build a website that matches ${images.length === 1 ? 'this Figma design' : 'these Figma designs'} closely.`,
     );
     setMessages((previous) => [
       ...previous,
       {
         id: generateId(),
         role: 'user',
-        content: `Imported ${images.length} Figma frame${images.length === 1 ? '' : 's'}: ${images
-          .map((image) => image.name)
-          .join(', ')}. They are attached to the next message.`,
+        content: `Attached ${images.length} Figma frame${
+          images.length === 1 ? '' : 's'
+        }: ${images.map((image) => image.name).join(', ')}. I will describe the build next.`,
         timestamp: Date.now(),
         attachments,
       },
     ]);
+    setShowHome(false);
     setPanel('none');
+    notify('Frames attached. Describe how to build them.', 'success');
   };
 
-  // Framework projects need their scaffold files so the export is a project
-  // you can actually run, not just the files the model wrote.
-  const exportFiles = useMemo(
-    () => ({ ...scaffoldFor(projectType), ...currentFiles }),
-    [projectType, currentFiles],
-  );
+  /* Navigation ------------------------------------------------------------ */
+
+  const enterStudio = () => {
+    setShowLanding(false);
+    try {
+      window.localStorage.setItem(STORAGE_VISITED, '1');
+    } catch {
+      // Still usable for this session.
+    }
+    if (Object.keys(currentFiles).length === 0 && messages.length === 0) setShowHome(true);
+  };
+
+  const openLanding = () => {
+    setPanel('none');
+    setMobileNavOpen(false);
+    setShowLanding(true);
+  };
+
+  const goHome = () => {
+    setShowHome(true);
+    setPanel('none');
+    setMobileNavOpen(false);
+  };
+
+  const togglePanel = (next: PanelName) => {
+    setPanel((current) => (current === next ? 'none' : next));
+    setMobileNavOpen(false);
+  };
+
+  const handleProjectTypeChange = (type: ProjectType) => {
+    setProjectType(type);
+    if (type === 'vanilla' && styling === 'tailwind') setStyling('vanilla');
+  };
+
+  const handleProviderChange = (next: ProviderId) => {
+    selectProvider(next);
+  };
+
+  const handleUseTemplate = (
+    prompt: string,
+    options?: { projectType?: ProjectType; siteMode?: SiteMode },
+  ) => {
+    setInput(prompt);
+    if (options?.projectType) {
+      setProjectType(options.projectType);
+      if (options.projectType === 'vanilla' && styling === 'tailwind') setStyling('vanilla');
+    }
+    if (options?.siteMode) setSiteMode(options.siteMode);
+    window.setTimeout(() => {
+      const textarea = document.querySelector<HTMLTextAreaElement>('#composer-input');
+      textarea?.focus();
+      textarea?.setSelectionRange(prompt.length, prompt.length);
+    }, 80);
+  };
+
+  const handleCustomDomainChange = (domain: string) => {
+    setCustomDomain(domain);
+    if (domain) notify(`${domain} saved. A CNAME is included in exports.`, 'success');
+  };
+
+  /* Derived --------------------------------------------------------------- */
+
+  const exportFiles = useMemo(() => {
+    const files: FileMap = { ...scaffoldFor(projectType, styling), ...currentFiles };
+    if (customDomain) files['CNAME'] = `${customDomain}\n`;
+    return files;
+  }, [projectType, styling, currentFiles, customDomain]);
 
   const hasFiles = Object.keys(currentFiles).length > 0;
   const projectTypeOption =
     PROJECT_TYPES.find((option) => option.value === projectType) ?? PROJECT_TYPES[0];
   const needsBuild = !projectTypeOption.previewable && hasFiles;
+  const isDashboard = showHome || messages.length === 0;
   const showChat = viewMode !== ViewMode.PREVIEW;
   const showPreview = viewMode !== ViewMode.CHAT;
 
-  return (
-    <div className="flex h-screen w-screen flex-col overflow-hidden bg-canvas font-sans text-ink">
-      <AppHeader
-        projectName={projectName}
-        onProjectNameChange={setProjectName}
-        isGenerating={isLoading}
-        hasFiles={hasFiles}
+  const modelPicker = (
+    <ModelPicker
+      provider={provider}
+      onProviderChange={handleProviderChange}
+      apiKey={apiKey}
+      customBaseUrl={customBaseUrl}
+      model={runSettings.model}
+      onModelChange={(model) => setRunSettings((previous) => ({ ...previous, model }))}
+      savedProviders={savedProviders}
+      hasUserKey={hasUserKey}
+      onManageProviders={() => setPanel('settings')}
+      align="right"
+    />
+  );
+
+  const chatWidth =
+    viewMode === ViewMode.CHAT
+      ? 'flex h-full w-full min-w-0 flex-col'
+      : viewMode === ViewMode.SPLIT
+        ? 'flex h-full w-full min-w-0 flex-col border-r border-line lg:w-[390px] xl:w-[440px]'
+        : 'hidden';
+
+  const previewWidth =
+    viewMode === ViewMode.PREVIEW
+      ? 'flex h-full min-w-0 flex-1 flex-col'
+      : viewMode === ViewMode.SPLIT
+        ? 'hidden h-full min-w-0 flex-1 flex-col lg:flex'
+        : 'hidden';
+
+  const sheetWidth =
+    panel === 'history'
+      ? 'sm:max-w-[720px]'
+      : panel === 'publish'
+        ? 'sm:max-w-[520px]'
+        : 'sm:max-w-[480px]';
+
+  /* Render ---------------------------------------------------------------- */
+
+  if (showLanding) {
+    return (
+      <LandingPage
         theme={theme}
-        onToggleTheme={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
-        onOpenSettings={() => setPanel(panel === 'settings' ? 'none' : 'settings')}
-        onOpenHistory={() => setPanel(panel === 'history' ? 'none' : 'history')}
-        onOpenPublish={() => setPanel(panel === 'publish' ? 'none' : 'publish')}
-        historyCount={versions.length}
-        isPublishing={isPublishing}
+        onToggleTheme={() => setTheme((value) => (value === 'dark' ? 'light' : 'dark'))}
+        onEnter={enterStudio}
+        returning={readVisited() || hasFiles || messages.length > 0}
+      />
+    );
+  }
+
+  return (
+    <div className="flex h-[100dvh] w-full overflow-hidden bg-canvas font-sans text-ink">
+      <Sidebar
+        activePanel={panel}
+        onHome={goHome}
+        onNewProject={requestNewProject}
+        onOpenPanel={togglePanel}
+        onOpenLanding={openLanding}
+        onToggleTheme={() => setTheme((value) => (value === 'dark' ? 'light' : 'dark'))}
+        theme={theme}
+        hasFiles={hasFiles}
+        isHome={isDashboard}
+        mobileOpen={mobileNavOpen}
+        onCloseMobile={() => setMobileNavOpen(false)}
       />
 
-      {!hasKey && (
-        <div
-          role="alert"
-          className="flex shrink-0 items-center justify-between gap-4 border-b border-accent/20 bg-accent-soft px-4 py-2 text-[12.5px] text-ink"
-        >
-          <span className="flex min-w-0 items-center gap-2">
-            <i className="fa-solid fa-key text-accent" aria-hidden="true" />
-            <span className="truncate">
-              Add your {providerDefinition.label} API key to start building. It stays in this
-            browser.
-            </span>
-          </span>
-          <button
-            onClick={() => setPanel('settings')}
-            className="shrink-0 rounded-lg bg-accent px-3 py-1 text-[11.5px] font-semibold text-accent-ink transition-colors hover:bg-accent-hover"
-          >
-            Add key
-          </button>
-        </div>
-      )}
+      <div className="flex min-w-0 flex-1 flex-col">
+        <TopBar
+          projectName={projectName}
+          onProjectNameChange={setProjectName}
+          isGenerating={isLoading}
+          hasFiles={hasFiles}
+          viewMode={viewMode}
+          onViewModeChange={setViewMode}
+          onOpenMobileNav={() => setMobileNavOpen(true)}
+          modelPicker={modelPicker}
+          onPublish={() => togglePanel('publish')}
+          isPublishing={isPublishing}
+          showViews={!isDashboard}
+        />
 
-      <div className="flex min-h-0 flex-1">
-        {showChat && (
-          <div
-            className={`flex h-full min-w-0 flex-col border-r border-line transition-[width] duration-300 ${
-              viewMode === ViewMode.SPLIT
-                ? 'w-full md:w-[400px] xl:w-[440px]'
-                : 'w-full'
-            }`}
-          >
-            <ChatPanel
-              messages={messages}
+        <main className="relative flex min-h-0 flex-1">
+          {isDashboard ? (
+            <DashboardHome
+              projectName={projectName}
+              hasWork={hasFiles}
               input={input}
               setInput={setInput}
-              onSend={(attachments) => handleSendMessage(attachments)}
+              onSend={(attachments) => void handleSendMessage(attachments)}
               isLoading={isLoading}
               onStop={handleStop}
               isAnnotating={isAnnotating}
@@ -489,110 +885,217 @@ const App: React.FC = () => {
               onRemoveAnnotation={(index) =>
                 setPendingAnnotations((previous) => previous.filter((_, i) => i !== index))
               }
-              systemInstruction={systemInstruction}
-              setSystemInstruction={setSystemInstruction}
-              isThinking={isThinking}
-              setIsThinking={setIsThinking}
-              onClear={handleClearChat}
-            />
-          </div>
-        )}
-
-        {showPreview && (
-          <div className="flex h-full min-w-0 flex-1 flex-col">
-            <PreviewPane
-              files={currentFiles}
-              isGenerating={isLoading}
-              onAutoFix={handleAutoFix}
-              onExplain={handleExplain}
-              isAnnotating={isAnnotating}
-              onAnnotateSelect={(x, y) => {
-                setPendingAnnotations((previous) => [...previous, { x, y }]);
-                setIsAnnotating(false);
+              versions={versions}
+              onOpenHistory={() => togglePanel('history')}
+              onContinue={() => {
+                setShowHome(false);
+                setViewMode(ViewMode.SPLIT);
               }}
-              onFileUpdate={setCurrentFiles}
-              needsBuild={needsBuild}
-              projectLabel={projectTypeOption.label}
-              exportFiles={exportFiles}
-              previewDevice={previewDevice}
-              onDeviceChange={setPreviewDevice}
+              onOpenSettings={() => togglePanel('settings')}
+              projectType={projectType}
+              styling={styling}
+              siteMode={siteMode}
+              onSiteModeChange={setSiteMode}
+              onUseTemplate={handleUseTemplate}
+              hasKey={hasKey}
+              modelPicker={modelPicker}
+              onImportProject={() => projectInputRef.current?.click()}
             />
-          </div>
-        )}
+          ) : (
+            <>
+              {showChat && (
+                <section className={chatWidth} aria-label="Build log">
+                  <ChatPanel
+                    messages={messages}
+                    input={input}
+                    setInput={setInput}
+                    onSend={(attachments) => void handleSendMessage(attachments)}
+                    isLoading={isLoading}
+                    onStop={handleStop}
+                    isAnnotating={isAnnotating}
+                    setIsAnnotating={setIsAnnotating}
+                    pendingAnnotations={pendingAnnotations}
+                    onRemoveAnnotation={(index) =>
+                      setPendingAnnotations((previous) => previous.filter((_, i) => i !== index))
+                    }
+                    systemInstruction={systemInstruction}
+                    setSystemInstruction={setSystemInstruction}
+                    isThinking={isThinking}
+                    setIsThinking={setIsThinking}
+                    onClear={requestNewProject}
+                  />
+                </section>
+              )}
 
-        {panel === 'settings' && (
-          <SettingsPanel
-            settings={runSettings}
-            setSettings={setRunSettings}
-            projectType={projectType}
-            onProjectTypeChange={setProjectType}
-            styling={styling}
-            onStylingChange={setStyling}
-            provider={provider}
-            onProviderChange={selectProvider}
-            apiKey={apiKey}
-            customBaseUrl={customBaseUrl}
-            onSaveCustomBaseUrl={saveCustomBaseUrl}
-            buildTimeAvailable={buildTimeAvailable}
-            hasUserKey={hasUserKey}
-            savedProviders={savedProviders}
-            onSaveKey={saveKey}
-            onForgetKey={forgetKey}
-            onClose={() => setPanel('none')}
-          />
-        )}
+              {showPreview && (
+                <section className={previewWidth} aria-label="Preview">
+                  <PreviewPane
+                    files={currentFiles}
+                    isGenerating={isLoading}
+                    onAutoFix={handleAutoFix}
+                    onExplain={handleExplain}
+                    onGenerateFrameworkPreview={handleGenerateFrameworkPreview}
+                    isAnnotating={isAnnotating}
+                    onAnnotateSelect={(x, y) => {
+                      setPendingAnnotations((previous) => [...previous, { x, y }]);
+                      setIsAnnotating(false);
+                      notify('Point added. Describe the change you want there.', 'info');
+                    }}
+                    onFileUpdate={setCurrentFiles}
+                    needsBuild={needsBuild}
+                    projectLabel={projectTypeOption.label}
+                    exportFiles={exportFiles}
+                    previewDevice={previewDevice}
+                    onDeviceChange={setPreviewDevice}
+                  />
+                </section>
+              )}
+            </>
+          )}
+        </main>
 
-        {panel === 'history' && (
-          <HistoryPanel
-            versions={versions}
-            currentFiles={currentFiles}
-            onRestore={handleRestoreVersion}
-            onClear={handleClearHistory}
-            onClose={() => setPanel('none')}
-          />
-        )}
-
-        {panel === 'publish' && (
-          <PublishPanel
-            files={exportFiles}
-            projectName={projectName}
-            onBusyChange={setIsPublishing}
-            onClose={() => {
-              setPanel('none');
-              setIsPublishing(false);
-            }}
-            onFigmaImport={handleFigmaImport}
-          />
+        {!isDashboard && (
+          <nav
+            className="flex h-12 shrink-0 items-center border-t border-line bg-surface/85 px-2 backdrop-blur lg:hidden"
+            aria-label="Workspace view"
+          >
+            <button
+              onClick={() => setViewMode(ViewMode.CHAT)}
+              className={`flex h-8 flex-1 items-center justify-center gap-1.5 rounded-lg text-[11px] font-semibold transition-colors ${
+                viewMode !== ViewMode.PREVIEW ? 'bg-surface-3 text-ink' : 'text-ink-faint'
+              }`}
+            >
+              <Icon name="message" size={13} />
+              Chat
+            </button>
+            <button
+              onClick={() => setViewMode(ViewMode.PREVIEW)}
+              disabled={!hasFiles}
+              className={`flex h-8 flex-1 items-center justify-center gap-1.5 rounded-lg text-[11px] font-semibold transition-colors disabled:opacity-40 ${
+                viewMode === ViewMode.PREVIEW ? 'bg-surface-3 text-ink' : 'text-ink-faint'
+              }`}
+            >
+              <Icon name="eye" size={13} />
+              Preview
+            </button>
+            <button
+              onClick={() => togglePanel('history')}
+              className="flex h-8 flex-1 items-center justify-center gap-1.5 rounded-lg text-[11px] font-semibold text-ink-faint transition-colors hover:text-ink"
+            >
+              <Icon name="clock" size={13} />
+              History
+            </button>
+            <button
+              onClick={() => togglePanel('settings')}
+              className="flex h-8 flex-1 items-center justify-center gap-1.5 rounded-lg text-[11px] font-semibold text-ink-faint transition-colors hover:text-ink"
+            >
+              <Icon name="sliders" size={13} />
+              Settings
+            </button>
+          </nav>
         )}
       </div>
+
+      {/* Panels are sheets, not columns: the canvas keeps its width. */}
+      {panel !== 'none' && (
+        <div className="fixed inset-0 z-[60]">
+          <button
+            className="animate-fade-in absolute inset-0 bg-black/40 backdrop-blur-[2px]"
+            onClick={() => setPanel('none')}
+            aria-label="Close panel"
+          />
+          <aside
+            role="dialog"
+            aria-modal="true"
+            aria-label={
+              panel === 'settings'
+                ? 'Settings'
+                : panel === 'history'
+                  ? 'Version history'
+                  : 'Publish and export'
+            }
+            className={`sheet-panel absolute right-0 top-0 flex h-full w-full flex-col shadow-2xl ${sheetWidth}`}
+          >
+            {panel === 'settings' && (
+              <SettingsPanel
+                settings={runSettings}
+                setSettings={setRunSettings}
+                projectType={projectType}
+                onProjectTypeChange={handleProjectTypeChange}
+                styling={styling}
+                onStylingChange={setStyling}
+                siteMode={siteMode}
+                onSiteModeChange={setSiteMode}
+                provider={provider}
+                onProviderChange={handleProviderChange}
+                apiKey={apiKey}
+                customBaseUrl={customBaseUrl}
+                onSaveCustomBaseUrl={saveCustomBaseUrl}
+                buildTimeAvailable={buildTimeAvailable}
+                hasUserKey={hasUserKey}
+                savedProviders={savedProviders}
+                onSaveKey={saveKey}
+                onForgetKey={forgetKey}
+                onClose={() => setPanel('none')}
+              />
+            )}
+
+            {panel === 'history' && (
+              <HistoryPanel
+                versions={versions}
+                currentFiles={currentFiles}
+                onRestore={handleRestoreVersion}
+                onClear={() => setConfirmHistory(true)}
+                onClose={() => setPanel('none')}
+              />
+            )}
+
+            {panel === 'publish' && (
+              <PublishPanel
+                files={exportFiles}
+                projectName={projectName}
+                customDomain={customDomain}
+                onCustomDomainChange={handleCustomDomainChange}
+                onBusyChange={setIsPublishing}
+                onClose={() => {
+                  setPanel('none');
+                  setIsPublishing(false);
+                }}
+                onFigmaImport={handleFigmaImport}
+              />
+            )}
+          </aside>
+        </div>
+      )}
 
       <input
         type="file"
         ref={projectInputRef}
         className="hidden"
         accept=".zip,.html"
-        onChange={handleProjectFileChange}
+        onChange={(event) => void handleProjectFileChange(event)}
       />
-      <input type="file" ref={fileInputRef} className="hidden" />
 
-      <div className="flex shrink-0 items-center justify-center gap-2 border-t border-line bg-surface px-3 py-1.5 md:hidden">
-        <button
-          onClick={() => setViewMode(ViewMode.CHAT)}
-          className={`rounded-lg px-3 py-1.5 text-[12px] font-medium transition-colors ${
-            viewMode === ViewMode.CHAT ? 'bg-surface-3 text-ink' : 'text-ink-muted'
-          }`}
-        >
-          Chat
-        </button>
-        <button
-          onClick={() => setViewMode(ViewMode.PREVIEW)}
-          className={`rounded-lg px-3 py-1.5 text-[12px] font-medium transition-colors ${
-            viewMode === ViewMode.PREVIEW ? 'bg-surface-3 text-ink' : 'text-ink-muted'
-          }`}
-        >
-          Preview
-        </button>
-      </div>
+      <ConfirmDialog
+        open={confirmNew}
+        title="Start a new project?"
+        body="Your current files will leave the canvas. Every saved version stays in history, so you can restore this build later."
+        confirmLabel="New project"
+        onConfirm={performNewProject}
+        onCancel={() => setConfirmNew(false)}
+      />
+
+      <ConfirmDialog
+        open={confirmHistory}
+        title="Clear every saved version?"
+        body="Snapshots live only in this browser. Clearing them cannot be undone, and the current files on the canvas are not affected."
+        confirmLabel="Clear history"
+        tone="danger"
+        onConfirm={handleClearHistory}
+        onCancel={() => setConfirmHistory(false)}
+      />
+
+      <Toast toast={toast} onDismiss={() => setToast(null)} />
     </div>
   );
 };

@@ -3,59 +3,77 @@
 /*
  * Design tokens.
  *
- * Everything is defined as a plain CSS variable so the light and dark themes
- * can swap at runtime, and the Tailwind theme maps onto those variables.
+ * A warm paper canvas, near-black ink, and a single ember accent that carries
+ * the primary action. Light and dark swap at runtime; every component reads
+ * the same variables, so the two themes never drift apart.
  */
 
 :root,
 [data-theme='light'] {
-  --canvas: #f4f4f6;
-  --surface: #ffffff;
-  --surface-2: #fafafa;
-  --surface-3: #f0f0f2;
-  --surface-hover: #ebebee;
-  --line: #e4e4e8;
-  --line-strong: #d4d4da;
-  --ink: #16161a;
-  --ink-muted: #5f636b;
-  --ink-faint: #91959d;
-  --accent: #2f6bff;
-  --accent-hover: #2457db;
-  --accent-soft: #2f6bff14;
+  --canvas: #f5f2ec;
+  --canvas-deep: #ece7de;
+  --surface: #fffdf9;
+  --surface-2: #f7f3ec;
+  --surface-3: #efe9df;
+  --surface-hover: #e8e1d5;
+  --line: #e4ddd1;
+  --line-strong: #cfc6b7;
+  --ink: #17130f;
+  --ink-muted: #6c645a;
+  --ink-faint: #9a9185;
+  --accent: #e94f22;
+  --accent-2: #ff3d81;
+  --accent-hover: #d44318;
+  --accent-soft: #e94f2214;
   --accent-ink: #ffffff;
-  --danger: #d92d20;
-  --success: #12805c;
-  --warning: #b25e09;
-  --shadow-sm: 0 1px 2px rgb(16 20 28 / 0.05);
-  --shadow-md: 0 6px 20px -6px rgb(16 20 28 / 0.12), 0 2px 6px -2px rgb(16 20 28 / 0.06);
-  --shadow-lg: 0 24px 60px -18px rgb(16 20 28 / 0.22);
+  --brand: #e94f22;
+  --brand-2: #ff3d81;
+  --violet: #7257ff;
+  --mint: #0f8a67;
+  --danger: #cf2f23;
+  --success: #0f7d5b;
+  --warning: #a85f06;
+  --shadow-sm: 0 1px 2px rgb(23 19 15 / 0.05);
+  --shadow-md: 0 10px 30px -12px rgb(23 19 15 / 0.18), 0 2px 6px -2px rgb(23 19 15 / 0.06);
+  --shadow-lg: 0 36px 80px -28px rgb(23 19 15 / 0.34), 0 8px 24px -12px rgb(23 19 15 / 0.14);
+  --shadow-glow: 0 24px 70px -24px rgb(233 79 34 / 0.45);
+  --grid-line: rgb(23 19 15 / 0.05);
 }
 
 [data-theme='dark'] {
-  --canvas: #0c0c0e;
-  --surface: #141416;
-  --surface-2: #1a1a1d;
-  --surface-3: #232327;
-  --surface-hover: #2a2a2f;
-  --line: #27272b;
-  --line-strong: #35353b;
-  --ink: #f3f3f5;
-  --ink-muted: #a0a3ab;
-  --ink-faint: #71747c;
-  --accent: #5b8bff;
-  --accent-hover: #7aa0ff;
-  --accent-soft: #5b8bff1f;
-  --accent-ink: #0c0c0e;
-  --danger: #ff6b6b;
+  --canvas: #0d0b0a;
+  --canvas-deep: #080706;
+  --surface: #151210;
+  --surface-2: #1c1815;
+  --surface-3: #27211c;
+  --surface-hover: #2f2822;
+  --line: #2b241e;
+  --line-strong: #40362d;
+  --ink: #f8f3ea;
+  --ink-muted: #b3a89a;
+  --ink-faint: #7e7365;
+  --accent: #ff6a3d;
+  --accent-2: #ff4f8b;
+  --accent-hover: #ff855f;
+  --accent-soft: #ff6a3d1f;
+  --accent-ink: #170c07;
+  --brand: #ff6a3d;
+  --brand-2: #ff4f8b;
+  --violet: #9b84ff;
+  --mint: #43d6ac;
+  --danger: #ff7a6e;
   --success: #4ade80;
   --warning: #fbbf24;
-  --shadow-sm: 0 1px 2px rgb(0 0 0 / 0.4);
-  --shadow-md: 0 6px 20px -6px rgb(0 0 0 / 0.55), 0 2px 6px -2px rgb(0 0 0 / 0.4);
-  --shadow-lg: 0 24px 60px -18px rgb(0 0 0 / 0.7);
+  --shadow-sm: 0 1px 2px rgb(0 0 0 / 0.5);
+  --shadow-md: 0 10px 30px -12px rgb(0 0 0 / 0.7), 0 2px 6px -2px rgb(0 0 0 / 0.5);
+  --shadow-lg: 0 36px 90px -28px rgb(0 0 0 / 0.9), 0 8px 24px -12px rgb(0 0 0 / 0.6);
+  --shadow-glow: 0 24px 80px -24px rgb(255 106 61 / 0.4);
+  --grid-line: rgb(255 246 234 / 0.06);
 }
 
 @theme inline {
   --color-canvas: var(--canvas);
+  --color-canvas-deep: var(--canvas-deep);
   --color-surface: var(--surface);
   --color-surface-2: var(--surface-2);
   --color-surface-3: var(--surface-3);
@@ -66,19 +84,25 @@
   --color-ink-muted: var(--ink-muted);
   --color-ink-faint: var(--ink-faint);
   --color-accent: var(--accent);
+  --color-accent-2: var(--accent-2);
   --color-accent-hover: var(--accent-hover);
   --color-accent-soft: var(--accent-soft);
   --color-accent-ink: var(--accent-ink);
+  --color-brand: var(--brand);
+  --color-brand-2: var(--brand-2);
+  --color-violet: var(--violet);
+  --color-mint: var(--mint);
   --color-danger: var(--danger);
   --color-success: var(--success);
   --color-warning: var(--warning);
 
-  --font-sans: 'Inter Variable', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-sans: 'Manrope Variable', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-display: 'Fraunces Variable', 'Iowan Old Style', Georgia, serif;
   --font-mono: 'Fira Code Variable', ui-monospace, 'SFMono-Regular', Menlo, monospace;
 
   --radius-xl: 16px;
-  --radius-2xl: 20px;
-  --radius-3xl: 28px;
+  --radius-2xl: 22px;
+  --radius-3xl: 30px;
 }
 
 @layer base {
@@ -88,14 +112,25 @@
     height: 100%;
   }
 
+  html {
+    scroll-behavior: smooth;
+    color-scheme: light;
+  }
+
+  [data-theme='dark'] {
+    color-scheme: dark;
+  }
+
   body {
     margin: 0;
     background-color: var(--canvas);
     color: var(--ink);
     font-family: var(--font-sans);
     font-size: 14px;
+    font-feature-settings: 'ss01', 'cv11';
     -webkit-font-smoothing: antialiased;
     text-rendering: optimizeLegibility;
+    overflow-x: hidden;
   }
 
   button {
@@ -113,11 +148,12 @@
   :focus-visible {
     outline: 2px solid var(--accent);
     outline-offset: 2px;
-    border-radius: 6px;
+    border-radius: 8px;
   }
 
   ::selection {
     background: var(--accent-soft);
+    color: var(--ink);
   }
 
   ::-webkit-scrollbar {
@@ -143,25 +179,44 @@
 }
 
 @layer components {
-  /* Soft, quiet scrollbars inside scroll regions. */
   .scroll-thin {
     scrollbar-width: thin;
     scrollbar-color: var(--line-strong) transparent;
   }
 
-  .panel {
+  .card {
     background: var(--surface);
     border: 1px solid var(--line);
-    border-radius: var(--radius-xl);
+    border-radius: var(--radius-2xl);
     box-shadow: var(--shadow-sm);
   }
 
-  /*
-   * Buttons.
-   *
-   * One semantic class per role so every control reads the same way at a
-   * glance. `size` controls height, `variant` controls weight.
-   */
+  .input {
+    width: 100%;
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    background: var(--surface-2);
+    padding: 0.55rem 0.75rem;
+    color: var(--ink);
+    font-size: 12.5px;
+    outline: none;
+    transition:
+      border-color 0.16s ease,
+      box-shadow 0.16s ease,
+      background-color 0.16s ease;
+  }
+
+  .input::placeholder {
+    color: var(--ink-faint);
+  }
+
+  .input:focus {
+    border-color: color-mix(in srgb, var(--accent) 55%, var(--line));
+    background: var(--surface);
+    box-shadow: 0 0 0 3px var(--accent-soft);
+  }
+
+  /* Buttons. One semantic role per class, so the whole app reads the same. */
   .btn {
     display: inline-flex;
     align-items: center;
@@ -169,7 +224,7 @@
     gap: 0.5rem;
     flex-shrink: 0;
     white-space: nowrap;
-    border-radius: 10px;
+    border-radius: 11px;
     font-weight: 600;
     line-height: 1;
     cursor: pointer;
@@ -185,46 +240,74 @@
 
   .btn:disabled {
     cursor: not-allowed;
-    opacity: 0.45;
+    opacity: 0.42;
+  }
+
+  /* A disabled primary action should read as unavailable, not disappear. */
+  .btn-primary:disabled,
+  .btn-dark:disabled {
+    opacity: 1;
+    background-image: none;
+    background-color: var(--surface-3);
+    border-color: var(--line);
+    color: var(--ink-muted);
+    box-shadow: none;
   }
 
   .btn:not(:disabled):active {
     transform: scale(0.98);
   }
 
+  .btn-xs {
+    height: 1.5rem;
+    padding: 0 0.45rem;
+    font-size: 0.68rem;
+    border-radius: 7px;
+  }
+
   .btn-sm {
-    height: 1.75rem;
-    padding: 0 0.5rem;
+    height: 1.8rem;
+    padding: 0 0.6rem;
     font-size: 0.72rem;
-    border-radius: 8px;
+    border-radius: 9px;
   }
 
   .btn-md {
-    height: 2rem;
-    padding: 0 0.75rem;
-    font-size: 0.78rem;
+    height: 2.15rem;
+    padding: 0 0.85rem;
+    font-size: 0.76rem;
   }
 
   .btn-lg {
-    height: 2.375rem;
-    padding: 0 1rem;
-    font-size: 0.8rem;
+    height: 2.75rem;
+    padding: 0 1.2rem;
+    font-size: 0.82rem;
+    border-radius: 13px;
   }
 
-  /* Filled accent. One per view, for the primary action. */
   .btn-primary {
-    background: var(--accent);
-    border: 1px solid var(--accent);
-    color: var(--accent-ink);
-    box-shadow: var(--shadow-sm);
+    position: relative;
+    overflow: hidden;
+    background-image: linear-gradient(135deg, var(--accent) 0%, var(--accent-2) 115%);
+    border: 1px solid color-mix(in srgb, var(--accent) 80%, #000 6%);
+    color: #fff;
+    box-shadow:
+      0 10px 24px -12px color-mix(in srgb, var(--accent) 65%, transparent),
+      inset 0 1px 0 rgb(255 255 255 / 0.18);
+  }
+
+  [data-theme='dark'] .btn-primary {
+    color: #1a0d08;
+    border-color: color-mix(in srgb, var(--accent) 70%, #fff 8%);
   }
 
   .btn-primary:not(:disabled):hover {
-    background: var(--accent-hover);
-    border-color: var(--accent-hover);
+    filter: saturate(1.08) brightness(1.03);
+    box-shadow:
+      0 14px 30px -12px color-mix(in srgb, var(--accent) 70%, transparent),
+      inset 0 1px 0 rgb(255 255 255 / 0.2);
   }
 
-  /* Quiet surface. The default for repeated controls. */
   .btn-secondary {
     background: var(--surface);
     border: 1px solid var(--line);
@@ -233,11 +316,10 @@
   }
 
   .btn-secondary:not(:disabled):hover {
-    background: var(--surface-3);
+    background: var(--surface-2);
     border-color: var(--line-strong);
   }
 
-  /* No chrome. For icon buttons sitting inside a tool or card. */
   .btn-ghost {
     background: transparent;
     border: 1px solid transparent;
@@ -249,15 +331,25 @@
     color: var(--ink);
   }
 
-  /* Accent tint. For secondary actions that still belong to the flow. */
   .btn-soft {
     background: var(--accent-soft);
-    border: 1px solid color-mix(in srgb, var(--accent) 28%, transparent);
+    border: 1px solid color-mix(in srgb, var(--accent) 26%, transparent);
     color: var(--accent);
   }
 
   .btn-soft:not(:disabled):hover {
-    background: color-mix(in srgb, var(--accent) 20%, transparent);
+    background: color-mix(in srgb, var(--accent) 18%, transparent);
+  }
+
+  .btn-dark {
+    background: var(--ink);
+    border: 1px solid var(--ink);
+    color: var(--canvas);
+    box-shadow: var(--shadow-sm);
+  }
+
+  .btn-dark:not(:disabled):hover {
+    background: color-mix(in srgb, var(--ink) 88%, var(--accent));
   }
 
   .btn-danger {
@@ -271,18 +363,18 @@
   }
 
   .btn-icon {
-    width: 2rem;
-    height: 2rem;
+    width: 2.15rem;
+    height: 2.15rem;
     padding: 0;
-    border-radius: 9px;
+    border-radius: 10px;
   }
 
   .btn-icon.btn-sm {
-    width: 1.75rem;
-    height: 1.75rem;
+    width: 1.8rem;
+    height: 1.8rem;
+    border-radius: 9px;
   }
 
-  /* A button that is waiting on work. */
   .btn[data-loading='true'] {
     color: transparent;
     position: relative;
@@ -298,25 +390,113 @@
     left: 50%;
     margin: -0.55em 0 0 -0.55em;
     border-radius: 50%;
-    border-width: 1.75px;
-    border-style: solid;
-    border-color: currentColor;
-    border-top-color: transparent;
+    border: 1.75px solid var(--ink-faint);
+    border-top-color: var(--ink);
+    animation: spin 0.7s linear infinite;
+  }
+
+  .btn-primary[data-loading='true']::after,
+  .btn-dark[data-loading='true']::after {
+    border-color: rgb(255 255 255 / 0.35);
+    border-top-color: #fff;
+  }
+
+  /* A light that sweeps across the primary button once on hover. */
+  .btn-primary::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -80%;
+    width: 60%;
+    height: 100%;
+    transform: skewX(-20deg);
+    background-image: linear-gradient(90deg, transparent, rgb(255 255 255 / 0.3), transparent);
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  .btn-primary:not(:disabled):hover::before {
+    animation: btn-shine 0.65s ease-out forwards;
+  }
+
+  .chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    border-radius: 999px;
+    border: 1px solid var(--line);
+    background: var(--surface);
+    padding: 0.3rem 0.65rem;
+    font-size: 11.5px;
+    font-weight: 600;
+    color: var(--ink-muted);
+    transition:
+      background-color 0.15s ease,
+      color 0.15s ease,
+      border-color 0.15s ease;
+  }
+
+  .chip:hover {
+    border-color: var(--line-strong);
     color: var(--ink);
   }
 
-  .btn[data-loading='true'][class*='btn-primary']::after,
-  .btn[data-loading='true'][class*='btn-soft']::after {
-    color: var(--accent-ink);
+  .popover {
+    border: 1px solid var(--line);
+    border-radius: 16px;
+    background: var(--surface);
+    box-shadow: var(--shadow-lg);
+    animation: panel-in 0.16s ease-out both;
   }
 
-  .btn[data-loading='true'][class*='btn-soft']::after {
+  .sheet-panel {
+    border-left: 1px solid var(--line);
+    background: var(--surface);
+    box-shadow: var(--shadow-lg);
+    animation: sheet-in 0.26s cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+
+  .rail-item {
+    position: relative;
+    display: flex;
+    width: 100%;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.25rem;
+    padding: 0.55rem 0.25rem;
+    border-radius: 11px;
+    color: var(--ink-faint);
+    font-size: 9.5px;
+    font-weight: 650;
+    letter-spacing: 0.015em;
+    transition:
+      background-color 0.15s ease,
+      color 0.15s ease;
+  }
+
+  .rail-item:hover {
+    background: var(--surface-2);
+    color: var(--ink);
+  }
+
+  .rail-item[data-active='true'] {
+    background: var(--accent-soft);
     color: var(--accent);
   }
 
-  /*
-   * Chat typing indicator. Three dots that chase each other.
-   */
+  .rail-item[data-active='true']::before {
+    content: '';
+    position: absolute;
+    left: -12px;
+    top: 50%;
+    height: 18px;
+    width: 2.5px;
+    transform: translateY(-50%);
+    border-radius: 2px;
+    background: var(--accent);
+  }
+
+  /* Chat typing indicator. */
   .dots {
     display: inline-flex;
     align-items: center;
@@ -334,29 +514,13 @@
   .dots > span:nth-child(1) {
     animation-delay: 0s;
   }
-
   .dots > span:nth-child(2) {
     animation-delay: 0.16s;
   }
-
   .dots > span:nth-child(3) {
     animation-delay: 0.32s;
   }
 
-  @keyframes dot-bounce {
-    0%,
-    70%,
-    100% {
-      transform: translateY(0);
-      opacity: 0.5;
-    }
-    35% {
-      transform: translateY(-4px);
-      opacity: 1;
-    }
-  }
-
-  /* Shimmer for a placeholder that has not arrived yet. */
   .shimmer {
     position: relative;
     overflow: hidden;
@@ -377,55 +541,191 @@
     animation: shimmer-sweep 1.6s infinite;
   }
 
-  @keyframes shimmer-sweep {
-    100% {
-      transform: translateX(100%);
-    }
+  .diff-add {
+    background: color-mix(in srgb, var(--success) 11%, transparent);
+    color: var(--success);
   }
 
-  /* A light that sweeps across the primary button once on hover. */
-  .btn-primary {
-    position: relative;
-    overflow: hidden;
+  .diff-remove {
+    background: color-mix(in srgb, var(--danger) 10%, transparent);
+    color: var(--danger);
   }
 
-  .btn-primary::before {
-    content: '';
-    position: absolute;
-    top: 0;
-    left: -80%;
-    width: 60%;
-    height: 100%;
-    transform: skewX(-20deg);
-    background-image: linear-gradient(
-      90deg,
-      transparent,
-      rgb(255 255 255 / 0.28),
-      transparent
-    );
-    opacity: 0;
-    transition: none;
-    pointer-events: none;
+  .toolbar-btn {
+    display: inline-flex;
+    height: 2rem;
+    align-items: center;
+    gap: 0.4rem;
+    border-radius: 9px;
+    padding: 0 0.55rem;
+    font-size: 11.5px;
+    font-weight: 600;
+    color: var(--ink-muted);
+    transition:
+      background-color 0.15s ease,
+      color 0.15s ease;
   }
 
-  .btn-primary:not(:disabled):hover::before {
-    animation: btn-shine 0.65s ease-out forwards;
+  .toolbar-btn:hover {
+    background: var(--surface-2);
+    color: var(--ink);
   }
 
-  @keyframes btn-shine {
-    from {
-      left: -80%;
-      opacity: 1;
-    }
-    to {
-      left: 130%;
-      opacity: 0;
-    }
+  .toolbar-btn[data-active='true'] {
+    background: var(--surface-3);
+    color: var(--ink);
   }
-
 }
 
-/* Small, quiet entrance used by the empty state and panels. */
+/* ---------------------------------------------------------------------------
+ * Landing page texture and motion.
+ * ------------------------------------------------------------------------- */
+
+.landing-page {
+  background-image:
+    radial-gradient(circle at 15% 0%, color-mix(in srgb, var(--accent) 7%, transparent), transparent 35%),
+    radial-gradient(circle at 88% 12%, color-mix(in srgb, var(--violet) 7%, transparent), transparent 32%);
+}
+
+.landing-grid {
+  background-image:
+    linear-gradient(to right, var(--grid-line) 1px, transparent 1px),
+    linear-gradient(to bottom, var(--grid-line) 1px, transparent 1px);
+  background-size: 56px 56px;
+  mask-image: linear-gradient(to bottom, black 30%, transparent 100%);
+}
+
+.display {
+  font-family: var(--font-display);
+  font-weight: 600;
+  letter-spacing: -0.035em;
+  line-height: 0.98;
+  font-variation-settings: 'SOFT' 40, 'WONK' 1;
+}
+
+.display em {
+  font-style: italic;
+  font-weight: 500;
+  color: var(--accent);
+}
+
+.eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 10.5px;
+  font-weight: 750;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+
+.text-brand-gradient {
+  background-image: linear-gradient(100deg, var(--accent) 0%, var(--accent-2) 48%, var(--violet) 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.brand-rule {
+  height: 1px;
+  background-image: linear-gradient(
+    90deg,
+    transparent,
+    color-mix(in srgb, var(--ink) 12%, transparent),
+    transparent
+  );
+}
+
+.mock-window {
+  border: 1px solid color-mix(in srgb, var(--line) 75%, transparent);
+  background: color-mix(in srgb, var(--surface) 88%, transparent);
+  backdrop-filter: blur(18px);
+  box-shadow:
+    0 50px 120px -40px rgb(23 19 15 / 0.45),
+    0 20px 50px -30px rgb(23 19 15 / 0.3),
+    inset 0 1px 0 rgb(255 255 255 / 0.35);
+}
+
+[data-theme='dark'] .mock-window {
+  box-shadow:
+    0 50px 130px -40px rgb(0 0 0 / 0.9),
+    0 20px 50px -30px rgb(0 0 0 / 0.7),
+    inset 0 1px 0 rgb(255 255 255 / 0.06);
+}
+
+.mock-dots {
+  display: inline-flex;
+  gap: 5px;
+}
+
+.mock-dots span {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--line-strong);
+}
+
+.mock-site {
+  background:
+    radial-gradient(circle at 78% 18%, #ffcf9e 0%, transparent 34%),
+    radial-gradient(circle at 20% 80%, #ffb8c8 0%, transparent 32%),
+    linear-gradient(140deg, #1a1320 0%, #2a1830 48%, #4a1c33 100%);
+}
+
+.mock-site-photo {
+  background:
+    radial-gradient(circle at 50% 28%, #ffe3b0 0%, #f5a16b 28%, transparent 62%),
+    linear-gradient(160deg, #ff8757 0%, #c8346a 48%, #46225e 100%);
+}
+
+.mock-shadow {
+  box-shadow: 0 30px 70px -30px rgb(0 0 0 / 0.55);
+}
+
+.hero-halo {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(80px);
+  opacity: 0.5;
+  pointer-events: none;
+  animation: float-slow 14s ease-in-out infinite alternate;
+}
+
+.typing-line {
+  overflow: hidden;
+  white-space: nowrap;
+  border-right: 2px solid color-mix(in srgb, var(--ink) 45%, transparent);
+  width: 0;
+  animation:
+    typing 4.5s steps(38, end) 0.6s forwards,
+    caret 1s step-end infinite;
+}
+
+/* Reveal-on-scroll, driven by IntersectionObserver in LandingPage. */
+.reveal-up {
+  opacity: 0;
+  transform: translateY(22px);
+  transition:
+    opacity 0.7s cubic-bezier(0.16, 1, 0.3, 1),
+    transform 0.7s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.reveal-up.is-visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+/* ---------------------------------------------------------------------------
+ * Motion.
+ * ------------------------------------------------------------------------- */
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 @keyframes rise-in {
   from {
     opacity: 0;
@@ -456,6 +756,17 @@
   animation: panel-in 0.16s ease-out both;
 }
 
+@keyframes sheet-in {
+  from {
+    opacity: 0.4;
+    transform: translateX(28px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
 @keyframes fade-in {
   from {
     opacity: 0;
@@ -483,7 +794,62 @@
   animation: pulse-soft 1.6s ease-in-out infinite;
 }
 
+@keyframes dot-bounce {
+  0%,
+  70%,
+  100% {
+    transform: translateY(0);
+    opacity: 0.5;
+  }
+  35% {
+    transform: translateY(-4px);
+    opacity: 1;
+  }
+}
+
+@keyframes shimmer-sweep {
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+@keyframes btn-shine {
+  from {
+    left: -80%;
+    opacity: 1;
+  }
+  to {
+    left: 130%;
+    opacity: 0;
+  }
+}
+
+@keyframes float-slow {
+  from {
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+  to {
+    transform: translate3d(24px, -18px, 0) scale(1.08);
+  }
+}
+
+@keyframes typing {
+  to {
+    width: 100%;
+  }
+}
+
+@keyframes caret {
+  50% {
+    border-color: transparent;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+
   *,
   *::before,
   *::after {
@@ -491,5 +857,15 @@
     animation-iteration-count: 1 !important;
     transition-duration: 0.001ms !important;
     scroll-behavior: auto !important;
+  }
+
+  .typing-line {
+    width: 100%;
+    border-right: 0;
+  }
+
+  .reveal-up {
+    opacity: 1;
+    transform: none;
   }
 }

@@ -17,9 +17,9 @@ npm install
 npm run dev
 ```
 
-Node.js 22 or newer is required.
+Node.js 22.12 or newer is required.
 
-There is no `.env` file to create. Add your Gemini API key in the app's **Run settings** panel, and it is stored in your browser only. See [README.md](README.md#api-key) for the details.
+There is no `.env` file to create. Open the app's **Settings** panel and add a key for one of the supported providers. Keys are stored in your browser only, one per provider. See [README.md](README.md) for the full setup and privacy details.
 
 ## Before opening a pull request
 
@@ -29,7 +29,7 @@ Run the full check:
 npm run check
 ```
 
-That runs TypeScript, the Vitest suite, and a production build. If you touched `src/lib/preview.ts` or `src/services/geminiService.ts`, add or update tests.
+That runs TypeScript, the Vitest suite, and a production build. If you touched `src/lib/preview.ts`, `src/lib/generation.ts`, or the provider layer, add or update tests.
 
 ## Guidelines
 
