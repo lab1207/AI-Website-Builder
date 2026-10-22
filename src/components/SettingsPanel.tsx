@@ -1,10 +1,12 @@
-import React, { useEffect, useId, useMemo, useState } from 'react';
+import React, { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { RunSettings } from '../types';
 import {
   PROVIDERS,
   getProvider,
   isFallbackModelList,
   listProviderModels,
+  testProviderConnection,
+  type ConnectionTestResult,
   type ModelOption,
   type ProviderId,
 } from '../lib/providers';
@@ -39,6 +41,10 @@ interface SettingsPanelProps {
   savedProviders: ProviderId[];
   onSaveKey: (provider: ProviderId, key: string) => { ok: boolean; persisted: boolean };
   onForgetKey: (provider: ProviderId) => void;
+  systemInstruction: string;
+  onSystemInstructionChange: (value: string) => void;
+  isThinking: boolean;
+  onThinkingChange: (value: boolean) => void;
   onClose: () => void;
 }
 
@@ -82,6 +88,10 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({
   savedProviders,
   onSaveKey,
   onForgetKey,
+  systemInstruction,
+  onSystemInstructionChange,
+  isThinking,
+  onThinkingChange,
   onClose,
 }) => {
   const [models, setModels] = useState<ModelOption[]>([]);
@@ -92,6 +102,9 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({
   const [keyStatus, setKeyStatus] = useState<{ tone: 'ok' | 'warn'; text: string } | null>(null);
   const [modelQuery, setModelQuery] = useState('');
   const [advancedOpen, setAdvancedOpen] = useState(false);
+  const [testing, setTesting] = useState(false);
+  const [testResult, setTestResult] = useState<ConnectionTestResult | null>(null);
+  const testAbortRef = useRef<AbortController | null>(null);
   const id = useId();
 
   const definition = getProvider(provider);
@@ -183,6 +196,49 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({
     });
     // Reload immediately with the new key.
     window.setTimeout(loadModels, 40);
+  };
+
+  useEffect(() => {
+    setTestResult(null);
+  }, [provider, settings.model, apiKey, customBaseUrl]);
+
+  useEffect(
+    () => () => {
+      testAbortRef.current?.abort();
+    },
+    [],
+  );
+
+  const handleTestConnection = async () => {
+    if (!apiKey.trim()) {
+      setTestResult({
+        ok: false,
+        message: `Add a ${definition.label} key first, then test it.`,
+        latency: 0,
+        model: settings.model,
+      });
+      return;
+    }
+
+    testAbortRef.current?.abort();
+    const controller = new AbortController();
+    testAbortRef.current = controller;
+    setTesting(true);
+    setTestResult(null);
+    const result = await testProviderConnection({
+      provider,
+      apiKey,
+      model: settings.model,
+      customBaseUrl,
+      signal: controller.signal,
+    });
+    if (testAbortRef.current === controller) {
+      setTestResult(result);
+      setTesting(false);
+      if (result.ok) {
+        setKeyStatus({ tone: 'ok', text: 'The key works and the model can generate text.' });
+      }
+    }
   };
 
   return (
@@ -337,6 +393,57 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({
                 {keyStatus.text}
               </p>
             )}
+
+            <div className="mt-2.5 flex flex-wrap items-center gap-2">
+              <button
+                onClick={() => void handleTestConnection()}
+                disabled={testing || !apiKey.trim()}
+                data-loading={testing ? 'true' : 'false'}
+                className="btn btn-sm btn-secondary"
+                title="Send one tiny request to verify the key, model, and endpoint"
+              >
+                <Icon
+                  name={testing ? 'refresh' : 'zap'}
+                  size={11}
+                  className={testing ? 'animate-spin' : ''}
+                />
+                {testing ? 'Testing…' : 'Test connection'}
+              </button>
+              <span className="text-[9px] leading-relaxed text-ink-faint">
+                A real 1-token request — not just a model list.
+              </span>
+            </div>
+
+            {testResult && (
+              <div
+                role="status"
+                className={`mt-2 flex items-start gap-2 rounded-xl border px-2.5 py-2 text-[10.5px] leading-relaxed ${
+                  testResult.ok
+                    ? 'border-success/25 bg-success/[0.06] text-ink'
+                    : 'border-danger/25 bg-danger/[0.06] text-danger'
+                }`}
+              >
+                <Icon
+                  name={testResult.ok ? 'check-circle' : 'alert'}
+                  size={12}
+                  className={`mt-0.5 shrink-0 ${testResult.ok ? 'text-success' : 'text-danger'}`}
+                />
+                <div className="min-w-0">
+                  <p>{testResult.message}</p>
+                  {testResult.ok && (
+                    <p className="mt-0.5 font-mono text-[9px] text-ink-faint">
+                      {testResult.latency}ms · {testResult.model}
+                      {testResult.sample ? ` · “${testResult.sample}”` : ''}
+                    </p>
+                  )}
+                  {!testResult.ok && testResult.latency > 0 && (
+                    <p className="mt-0.5 font-mono text-[9px] text-danger/70">
+                      {testResult.latency}ms · {testResult.model}
+                    </p>
+                  )}
+                </div>
+              </div>
+            )}
           </div>
         </section>
 
@@ -453,6 +560,36 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({
               </button>
             )}
           </p>
+
+          <div className="mt-2.5 flex items-start gap-2 rounded-xl border border-line bg-surface-2 px-2.5 py-2">
+            <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-surface text-accent">
+              <Icon name="bulb" size={12} />
+            </span>
+            <div className="min-w-0 flex-1">
+              <p className="text-[10.5px] font-semibold text-ink">Thinking mode</p>
+              <p className="mt-0.5 text-[9px] leading-relaxed text-ink-faint">
+                Lets a supported model plan before it writes. On by default; a complex page can
+                take longer, but the first draft is usually more coherent.
+              </p>
+            </div>
+            <button
+              onClick={() => onThinkingChange(!isThinking)}
+              role="switch"
+              aria-checked={isThinking}
+              aria-label="Thinking mode"
+              className={`relative mt-0.5 h-5 w-9 shrink-0 rounded-full border transition-colors ${
+                isThinking
+                  ? 'border-accent/40 bg-accent'
+                  : 'border-line-strong bg-surface-3'
+              }`}
+            >
+              <span
+                className={`absolute top-1/2 h-3.5 w-3.5 -translate-y-1/2 rounded-full bg-white shadow-sm transition-all ${
+                  isThinking ? 'left-[18px]' : 'left-[2px]'
+                }`}
+              />
+            </button>
+          </div>
         </section>
 
         {/* Project ------------------------------------------------------- */}
@@ -557,6 +694,49 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({
                 : 'Readable CSS with custom properties. Works everywhere.'}
             </p>
           </div>
+        </section>
+
+        {/* Custom instructions ------------------------------------------ */}
+        <section className="rounded-2xl border border-line bg-surface">
+          <details open={Boolean(systemInstruction.trim())}>
+            <summary className="flex cursor-pointer list-none items-center gap-2 px-3.5 py-3 [&::-webkit-details-marker]:hidden">
+              <span className="flex h-6 w-6 items-center justify-center rounded-md bg-surface-2 text-ink-muted">
+                <Icon name="sliders" size={12} />
+              </span>
+              <span className="text-[11px] font-bold uppercase tracking-[0.1em] text-ink">
+                Extra instructions
+              </span>
+              <span className="ml-auto text-[9.5px] text-ink-faint">
+                {systemInstruction.trim() ? 'Active' : 'Optional'}
+              </span>
+              <Icon name="chevron-down" size={11} className="text-ink-faint" />
+            </summary>
+            <div className="border-t border-line px-3.5 py-3">
+              <label htmlFor={`${id}-system`} className="sr-only">
+                Extra instructions added to every request
+              </label>
+              <textarea
+                id={`${id}-system`}
+                value={systemInstruction}
+                onChange={(event) => onSystemInstructionChange(event.target.value)}
+                placeholder="Use only system fonts. Keep the palette warm and neutral. Always include a contact section."
+                className="scroll-thin h-24 w-full resize-none rounded-xl border border-line bg-surface-2 p-2.5 text-[11.5px] leading-relaxed text-ink outline-none placeholder:text-ink-faint focus:border-accent/40"
+              />
+              <div className="mt-1.5 flex items-center justify-between gap-2">
+                <p className="text-[9.5px] leading-relaxed text-ink-faint">
+                  Added to every request, after the built-in design and fidelity rules.
+                </p>
+                {systemInstruction.trim() && (
+                  <button
+                    onClick={() => onSystemInstructionChange('')}
+                    className="shrink-0 text-[10px] font-semibold text-ink-faint hover:text-danger"
+                  >
+                    Clear
+                  </button>
+                )}
+              </div>
+            </div>
+          </details>
         </section>
 
         {/* Advanced ------------------------------------------------------ */}

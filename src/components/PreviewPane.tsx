@@ -28,7 +28,7 @@ interface PreviewPaneProps {
 
 type Tab = 'preview' | 'code' | 'assets';
 
-type AssetType = 'image' | 'video' | 'link' | 'text';
+type AssetType = 'image' | 'video' | 'link' | 'text' | 'token' | 'color';
 
 interface DetectedAsset {
   id: string;
@@ -37,6 +37,8 @@ interface DetectedAsset {
   type: AssetType;
   count: number;
   context?: string;
+  /** The custom-property name, for design tokens such as --space-4. */
+  name?: string;
 }
 
 const DEVICE_WIDTHS: Record<DeviceType, string> = {
@@ -67,6 +69,7 @@ const PreviewPane: React.FC<PreviewPaneProps> = ({
   exportFiles,
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
+  const iframeRef = useRef<HTMLIFrameElement>(null);
   const [activeTab, setActiveTab] = useState<Tab>('preview');
   const [copyFeedback, setCopyFeedback] = useState(false);
   const [showExportMenu, setShowExportMenu] = useState(false);
@@ -75,15 +78,34 @@ const PreviewPane: React.FC<PreviewPaneProps> = ({
   const [activePage, setActivePage] = useState('');
   const [previewNonce, setPreviewNonce] = useState(0);
   const [localFiles, setLocalFiles] = useState<FileMap>(files);
+  const [renderFiles, setRenderFiles] = useState<FileMap>(files);
+  const [assetDrafts, setAssetDrafts] = useState<Record<string, string>>({});
   const [assets, setAssets] = useState<{
     media: DetectedAsset[];
     links: DetectedAsset[];
     content: DetectedAsset[];
-  }>({ media: [], links: [], content: [] });
+    tokens: DetectedAsset[];
+    colors: DetectedAsset[];
+  }>({ media: [], links: [], content: [], tokens: [], colors: [] });
 
   useEffect(() => {
     setLocalFiles(files);
+    setAssetDrafts({});
   }, [files]);
+
+  /*
+   * Reloading the iframe on every streamed token makes the preview flicker
+   * and, in some browsers, leaves the last frame unpainted. Coalesce updates
+   * while a build is running and always render the final state immediately.
+   */
+  useEffect(() => {
+    if (!isGenerating) {
+      setRenderFiles(localFiles);
+      return;
+    }
+    const timer = window.setTimeout(() => setRenderFiles(localFiles), 350);
+    return () => window.clearTimeout(timer);
+  }, [localFiles, isGenerating]);
 
   const pages = useMemo(() => listPreviewPages(localFiles), [localFiles]);
   const hasStaticPreview = Boolean(localFiles['preview.html']);
@@ -119,9 +141,13 @@ const PreviewPane: React.FC<PreviewPaneProps> = ({
   // Multi-page links inside the preview ask the builder to switch page.
   useEffect(() => {
     const onMessage = (event: MessageEvent) => {
+      // Only the sandboxed preview may drive navigation, and only to a page
+      // that actually exists in this project.
+      if (event.source !== iframeRef.current?.contentWindow) return;
       const data = event.data as { type?: string; page?: string } | null;
-      if (!data || data.type !== 'awb:preview-navigate' || !data.page) return;
+      if (!data || data.type !== 'awb:preview-navigate' || typeof data.page !== 'string') return;
       const clean = data.page.replace(/^\.?\//, '');
+      if (clean.includes('..') || clean.startsWith('/')) return;
       if (pages.includes(clean)) {
         setActivePage(clean);
         setPreviewNonce((value) => value + 1);
@@ -133,8 +159,8 @@ const PreviewPane: React.FC<PreviewPaneProps> = ({
 
   const previewDoc = useMemo(() => {
     if (!canRender || !activePage) return '';
-    return buildPreviewDocument(localFiles, activePage);
-  }, [localFiles, activePage, canRender]);
+    return buildPreviewDocument(renderFiles, activePage);
+  }, [renderFiles, activePage, canRender]);
 
   const handleCodeChange = (newContent: string) => {
     if (!selectedFile) return;
@@ -147,25 +173,30 @@ const PreviewPane: React.FC<PreviewPaneProps> = ({
     const mediaMap = new Map<string, DetectedAsset>();
     const linkMap = new Map<string, DetectedAsset>();
     const textMap = new Map<string, DetectedAsset>();
+    const tokenMap = new Map<string, DetectedAsset>();
+    const colorMap = new Map<string, DetectedAsset>();
 
     const addAsset = (
       map: Map<string, DetectedAsset>,
       value: string,
       type: AssetType,
       context?: string,
+      name?: string,
     ) => {
       if (!value || value.trim() === '' || value.startsWith('data:')) return;
+      const key = name ? `${name}:${value}` : value;
 
-      if (map.has(value)) {
-        map.get(value)!.count += 1;
+      if (map.has(key)) {
+        map.get(key)!.count += 1;
       } else {
-        map.set(value, {
-          id: `${type}-${value}-${Math.random()}`,
+        map.set(key, {
+          id: `${type}:${key}`,
           originalValue: value,
           currentValue: value,
           type,
           count: 1,
           context,
+          name,
         });
       }
     };
@@ -195,12 +226,28 @@ const PreviewPane: React.FC<PreviewPaneProps> = ({
       }
     }
 
-    for (const filename of Object.keys(localFiles)) {
-      if (!filename.endsWith('.css')) continue;
+    for (const [filename, source] of Object.entries(localFiles)) {
+      if (!/\.(css|scss|sass|less)$/i.test(filename)) continue;
+
       const urlRegex = /url\((['"]?)(.*?)\1\)/g;
       let match: RegExpExecArray | null;
-      while ((match = urlRegex.exec(localFiles[filename])) !== null) {
+      while ((match = urlRegex.exec(source)) !== null) {
         addAsset(mediaMap, match[2], 'image');
+      }
+
+      // Custom properties are the cleanest handle on colour, spacing, radii,
+      // and shadows without touching every rule by hand.
+      const tokenRegex = /--([a-z0-9-]+)\s*:\s*([^;{}]+);/gi;
+      while ((match = tokenRegex.exec(source)) !== null) {
+        const name = `--${match[1]}`;
+        const value = match[2].trim();
+        if (!value || value.length > 120 || value.startsWith('url(')) continue;
+        addAsset(tokenMap, value, 'token', filename, name);
+      }
+
+      const colorRegex = /#[0-9a-f]{3,8}\b/gi;
+      while ((match = colorRegex.exec(source)) !== null) {
+        addAsset(colorMap, match[0].toLowerCase(), 'color', filename);
       }
     }
 
@@ -208,28 +255,40 @@ const PreviewPane: React.FC<PreviewPaneProps> = ({
       media: Array.from(mediaMap.values()),
       links: Array.from(linkMap.values()),
       content: Array.from(textMap.values()),
+      tokens: Array.from(tokenMap.values()),
+      colors: Array.from(colorMap.values()),
     });
   };
 
+  const esc = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+  /**
+   * Applies an asset edit once, on commit (blur or Enter), rather than on every
+   * keystroke. Committing per character re-parsed the whole project and moved
+   * the cursor on each key press.
+   */
   const handleUpdateAsset = (asset: DetectedAsset, newValue: string) => {
-    if (!newValue || newValue === asset.currentValue) return;
+    const trimmed = newValue.trim();
+    if (!trimmed || trimmed === asset.currentValue) return;
 
     const newFiles = { ...localFiles };
     let updated = false;
-
-    const escapeRegExp = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
     for (const filename of Object.keys(newFiles)) {
       const content = newFiles[filename];
       let newContent: string | null = null;
 
       if (asset.type === 'text') {
-        const regex = new RegExp(`>${escapeRegExp(asset.currentValue)}<`, 'g');
-        if (regex.test(content)) {
-          newContent = content.replace(regex, `>${newValue}<`);
-        }
+        const regex = new RegExp(`>${esc(asset.currentValue)}<`, 'g');
+        if (regex.test(content)) newContent = content.replace(regex, `>${trimmed}<`);
+      } else if (asset.type === 'token' && asset.name) {
+        const regex = new RegExp(
+          `(${esc(asset.name)}\\s*:\\s*)${esc(asset.currentValue)}`,
+          'g',
+        );
+        if (regex.test(content)) newContent = content.replace(regex, `$1${trimmed}`);
       } else if (content.includes(asset.currentValue)) {
-        newContent = content.split(asset.currentValue).join(newValue);
+        newContent = content.split(asset.currentValue).join(trimmed);
       }
 
       if (newContent !== null) {
@@ -242,6 +301,86 @@ const PreviewPane: React.FC<PreviewPaneProps> = ({
       setLocalFiles(newFiles);
       onFileUpdate?.(newFiles);
     }
+  };
+
+  const draftValue = (asset: DetectedAsset) => assetDrafts[asset.id] ?? asset.currentValue;
+
+  const commitDraft = (asset: DetectedAsset) => {
+    const draft = assetDrafts[asset.id];
+    if (draft !== undefined) handleUpdateAsset(asset, draft);
+    setAssetDrafts((previous) => {
+      const next = { ...previous };
+      delete next[asset.id];
+      return next;
+    });
+  };
+
+  const isColorValue = (value: string) =>
+    /^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i.test(value.trim());
+
+  const toColorInput = (value: string) => {
+    const trimmed = value.trim();
+    if (/^#[0-9a-f]{6}$/i.test(trimmed)) return trimmed;
+    if (/^#[0-9a-f]{3}$/i.test(trimmed)) {
+      return `#${trimmed[1]}${trimmed[1]}${trimmed[2]}${trimmed[2]}${trimmed[3]}${trimmed[3]}`;
+    }
+    return '#000000';
+  };
+
+  const renderAssetRow = (asset: DetectedAsset) => {
+    const value = draftValue(asset);
+    const showColorPicker = asset.type === 'color' || isColorValue(asset.currentValue);
+    return (
+      <div key={asset.id} className="flex items-center gap-2">
+        {asset.name && (
+          <span
+            className="w-[104px] shrink-0 truncate font-mono text-[9.5px] text-ink-faint"
+            title={asset.name}
+          >
+            {asset.name}
+          </span>
+        )}
+        {showColorPicker && (
+          <input
+            type="color"
+            value={toColorInput(value)}
+            onChange={(event) =>
+              setAssetDrafts((previous) => ({ ...previous, [asset.id]: event.target.value }))
+            }
+            onBlur={() => commitDraft(asset)}
+            aria-label={`Pick a colour for ${asset.name ?? asset.currentValue}`}
+            className="h-8 w-8 shrink-0 cursor-pointer rounded-md border border-line bg-surface-2 p-0.5"
+          />
+        )}
+        <input
+          value={value}
+          onChange={(event) =>
+            setAssetDrafts((previous) => ({ ...previous, [asset.id]: event.target.value }))
+          }
+          onBlur={() => commitDraft(asset)}
+          onKeyDown={(event) => {
+            if (event.key === 'Enter') {
+              event.preventDefault();
+              event.currentTarget.blur();
+            }
+            if (event.key === 'Escape') {
+              setAssetDrafts((previous) => {
+                const next = { ...previous };
+                delete next[asset.id];
+                return next;
+              });
+            }
+          }}
+          aria-label={`Edit ${asset.name ?? asset.currentValue}`}
+          className="input h-8 min-w-0 flex-1 py-0 font-mono text-[10.5px]"
+        />
+        {asset.count > 1 && (
+          <span className="shrink-0 rounded-full bg-surface-3 px-1.5 py-0.5 text-[9px] text-ink-faint">
+            ×{asset.count}
+          </span>
+        )}
+      </div>
+    );
   };
 
   const handleCopyCode = async () => {
@@ -269,11 +408,29 @@ const PreviewPane: React.FC<PreviewPaneProps> = ({
       const anchor = document.createElement('a');
       anchor.href = url;
       anchor.download = 'project.zip';
+      document.body.appendChild(anchor);
       anchor.click();
-      URL.revokeObjectURL(url);
+      anchor.remove();
+      // Revoking immediately can cancel the download in some browsers.
+      window.setTimeout(() => URL.revokeObjectURL(url), 1500);
     } finally {
       setShowExportMenu(false);
     }
+  };
+
+  const handleCopyPreviewHtml = async () => {
+    if (!canRender || !activePage) {
+      setShowExportMenu(false);
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(buildPreviewDocument(localFiles, activePage));
+      setCopyFeedback(true);
+      window.setTimeout(() => setCopyFeedback(false), 1800);
+    } catch {
+      // Clipboard access can be denied; nothing else to do.
+    }
+    setShowExportMenu(false);
   };
 
   const handleOverlayClick = (event: React.MouseEvent<HTMLDivElement>) => {
@@ -294,7 +451,12 @@ const PreviewPane: React.FC<PreviewPaneProps> = ({
     });
   }, [localFiles]);
 
-  const totalAssets = assets.media.length + assets.links.length + assets.content.length;
+  const totalAssets =
+    assets.media.length +
+    assets.links.length +
+    assets.content.length +
+    assets.tokens.length +
+    assets.colors.length;
   const lineCount = selectedFile ? (localFiles[selectedFile]?.split('\n').length ?? 0) : 0;
 
   /* Empty project -------------------------------------------------------- */
@@ -499,14 +661,11 @@ const PreviewPane: React.FC<PreviewPaneProps> = ({
                   Download ZIP
                 </button>
                 <button
-                  onClick={() => {
-                    setShowExportMenu(false);
-                    onFileUpdate?.(localFiles);
-                  }}
+                  onClick={() => void handleCopyPreviewHtml()}
                   className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-[12px] font-medium text-ink transition-colors hover:bg-surface-2"
                 >
-                  <Icon name="check" size={13} className="text-ink-faint" />
-                  Save code changes
+                  <Icon name="copy" size={13} className="text-ink-faint" />
+                  Copy rendered HTML
                 </button>
               </div>
             )}
@@ -563,6 +722,7 @@ const PreviewPane: React.FC<PreviewPaneProps> = ({
               <div className="relative h-[calc(100%-2rem)] w-full">
                 <iframe
                   key={`${activePage}-${previewNonce}`}
+                  ref={iframeRef}
                   title="Website preview"
                   className="h-full w-full border-0 bg-white"
                   srcDoc={previewDoc}
@@ -649,15 +809,21 @@ const PreviewPane: React.FC<PreviewPaneProps> = ({
                   <Icon name="palette" size={18} />
                 </span>
                 <p className="mt-3 text-[13px] font-medium text-ink">Nothing to edit yet</p>
-                <p className="mt-1 max-w-[280px] text-[11.5px] leading-relaxed text-ink-faint">
-                  Images, links, and button labels found in the generated pages will be
-                  editable here.
+                <p className="mt-1 max-w-[300px] text-[11.5px] leading-relaxed text-ink-faint">
+                  Images, links, colours, design tokens, and button labels found in the generated
+                  pages will be editable here.
                 </p>
               </div>
             ) : (
               <div className="space-y-5">
+                <p className="text-[10px] leading-relaxed text-ink-faint">
+                  Change a value and press Enter or click away. The edit is applied to every file
+                  that uses it, and the preview updates immediately.
+                </p>
                 {(
                   [
+                    ['Design tokens', 'sliders', assets.tokens],
+                    ['Colours', 'palette', assets.colors],
                     ['Images and media', 'image', assets.media],
                     ['Links', 'link', assets.links],
                     ['Button labels', 'pencil', assets.content],
@@ -672,23 +838,7 @@ const PreviewPane: React.FC<PreviewPaneProps> = ({
                           {group.length}
                         </span>
                       </h3>
-                      <div className="space-y-1.5">
-                        {group.map((asset) => (
-                          <div key={asset.id} className="flex items-center gap-2">
-                            <input
-                              value={asset.currentValue}
-                              onChange={(event) => handleUpdateAsset(asset, event.target.value)}
-                              aria-label={`${title}: ${asset.originalValue}`}
-                              className="input h-8 min-w-0 flex-1 py-0 font-mono text-[10.5px]"
-                            />
-                            {asset.count > 1 && (
-                              <span className="shrink-0 rounded-full bg-surface-3 px-1.5 py-0.5 text-[9px] text-ink-faint">
-                                ×{asset.count}
-                              </span>
-                            )}
-                          </div>
-                        ))}
-                      </div>
+                      <div className="space-y-1.5">{group.map(renderAssetRow)}</div>
                     </section>
                   ),
                 )}

@@ -6,6 +6,7 @@ interface TopBarProps {
   projectName: string;
   onProjectNameChange: (name: string) => void;
   isGenerating: boolean;
+  onStop: () => void;
   hasFiles: boolean;
   viewMode: ViewMode;
   onViewModeChange: (mode: ViewMode) => void;
@@ -27,6 +28,7 @@ const TopBar: React.FC<TopBarProps> = ({
   projectName,
   onProjectNameChange,
   isGenerating,
+  onStop,
   hasFiles,
   viewMode,
   onViewModeChange,
@@ -115,6 +117,13 @@ const TopBar: React.FC<TopBarProps> = ({
         )}
 
         <div className="hidden sm:block">{modelPicker}</div>
+
+        {isGenerating && (
+          <button onClick={onStop} className="btn btn-sm btn-secondary" title="Stop this build">
+            <Icon name="stop" size={11} />
+            <span className="hidden sm:inline">Stop</span>
+          </button>
+        )}
 
         <button
           onClick={onPublish}

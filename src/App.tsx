@@ -12,8 +12,18 @@ import TopBar from './components/TopBar';
 import Toast, { type ToastState, type ToastTone } from './components/Toast';
 import ConfirmDialog from './components/ConfirmDialog';
 import Icon from './components/Icon';
-import { DEFAULT_SYSTEM_INSTRUCTION, parseGeneratedFiles } from './lib/generation';
-import { Message, ViewMode, Attachment, FileMap, RunSettings, DeviceType } from './types';
+import { DEFAULT_SYSTEM_INSTRUCTION, parseFollowUps, parseGeneratedFiles } from './lib/generation';
+import {
+  Message,
+  ViewMode,
+  Attachment,
+  FileMap,
+  RunSettings,
+  DeviceType,
+  BuildStep,
+  QueuedPrompt,
+  StudioSeed,
+} from './types';
 import { useProvider } from './hooks/useProvider';
 import { sendChat, getProvider } from './lib/providers';
 import type { ProviderId } from './lib/providers';
@@ -149,6 +159,71 @@ function versionLabel(prompt: string): string {
   return clean.length > 64 ? `${clean.slice(0, 61)}…` : clean;
 }
 
+/**
+ * Sending only a screenshot or only a file is a valid way to start. The model
+ * gets an explicit instruction instead of an empty user message.
+ */
+function promptForAttachments(attachments: Attachment[]): string {
+  const images = attachments.filter((attachment) => attachment.type === 'image');
+  const texts = attachments.filter((attachment) => attachment.type === 'text');
+  const captured = texts.find((attachment) => attachment.sourceUrl);
+
+  if (captured && images.length > 0) {
+    return `Rebuild ${captured.sourceUrl} as a working website. Match the attached screenshot exactly for layout, type, colour, imagery, and spacing, and use the captured page text for real headings, navigation, and copy. Make every section and interaction work.`;
+  }
+  if (images.length > 0 && texts.length > 0) {
+    return 'Rebuild the website supplied in the attached screenshot and source files. Match the visual reference exactly, and use the actual markup, content, and styles in the files instead of inventing replacements.';
+  }
+  if (images.length > 0) {
+    return images.length === 1
+      ? 'Rebuild this website to match the attached screenshot exactly, including every visible section, the type scale, colours, spacing, imagery, and responsive behaviour.'
+      : 'Rebuild this website to match the attached screenshots exactly. Treat them as views of the same site at different widths or pages, and preserve every section and state.';
+  }
+  if (texts.length > 0) {
+    return 'Use the attached files as the source of truth for this website. Rebuild it faithfully as complete, working files, keeping the real content, structure, and visual language. If the files are an existing project, keep the parts that already work and improve the rest.';
+  }
+  return 'Build a distinctive, complete website from this brief.';
+}
+
+function briefLabel(prompt: string, attachments: Attachment[]): string {
+  const clean = prompt
+    .replace(/\n\n\[CONTEXT:[\s\S]*$/, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+  if (clean) return clean.length > 92 ? `${clean.slice(0, 89)}…` : clean;
+  if (attachments.length === 1) return attachments[0].name ?? 'One reference';
+  if (attachments.length > 1) return `${attachments.length} references`;
+  return 'Starting point';
+}
+
+function initialBuildSteps(
+  prompt: string,
+  attachments: Attachment[],
+  providerLabel: string,
+  model: string,
+): BuildStep[] {
+  const now = Date.now();
+  return [
+    {
+      id: 'brief',
+      label: 'Brief received',
+      detail: briefLabel(prompt, attachments),
+      state: 'done',
+      at: now,
+    },
+    {
+      id: 'connect',
+      label: `Connecting to ${providerLabel}`,
+      detail: model,
+      state: 'active',
+      at: now,
+    },
+    { id: 'stream', label: 'Writing the site', state: 'pending', at: now },
+    { id: 'files', label: 'Assembling files and preview', state: 'pending', at: now },
+    { id: 'finish', label: 'Checking the result', state: 'pending', at: now },
+  ];
+}
+
 /* --------------------------------------------------------------------------
  * App
  * ------------------------------------------------------------------------ */
@@ -178,10 +253,13 @@ const App: React.FC = () => {
   });
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [queuedPrompts, setQueuedPrompts] = useState<QueuedPrompt[]>([]);
+  const [queuePaused, setQueuePaused] = useState(false);
+  const [seed, setSeed] = useState<StudioSeed | null>(null);
   const [currentFiles, setCurrentFiles] = useState<FileMap>(initialWorkspace?.files ?? {});
   const [viewMode, setViewMode] = useState<ViewMode>(ViewMode.SPLIT);
   const [systemInstruction, setSystemInstruction] = useState('');
-  const [isThinking, setIsThinking] = useState(false);
+  const [isThinking, setIsThinking] = useState(true);
   const [isAnnotating, setIsAnnotating] = useState(false);
   const [pendingAnnotations, setPendingAnnotations] = useState<Array<{ x: number; y: number }>>([]);
   const [previewDevice, setPreviewDevice] = useState<DeviceType>('desktop');
@@ -330,31 +408,70 @@ const App: React.FC = () => {
   /* Sending --------------------------------------------------------------- */
 
   const handleSendMessage = useCallback(
-    async (attachments: Attachment[] = [], overrideInput?: string) => {
-      if (isLoading) return;
+    async (
+      attachments: Attachment[] = [],
+      overrideInput?: string,
+      options: {
+        annotations?: Array<{ x: number; y: number }>;
+        device?: DeviceType;
+        fromQueue?: boolean;
+      } = {},
+    ) => {
+      const fromQueue = options.fromQueue === true;
+      const annotations = options.annotations ?? pendingAnnotations;
+      const device = options.device ?? previewDevice;
 
       if (provider !== 'custom' && !hasKey) {
         setPanel('settings');
+        if (fromQueue) setQueuePaused(true);
         notify(`Add a ${providerDefinition.label} key to start building.`, 'info');
         return;
       }
 
       let textToSend = (overrideInput ?? input).trimEnd();
-      const hasAnnotations = !overrideInput && pendingAnnotations.length > 0;
 
-      if (!textToSend.trim() && attachments.length === 0 && !hasAnnotations) return;
+      if (!textToSend && attachments.length === 0 && annotations.length === 0) return;
+
+      // While a build is running, a new message is queued rather than rejected.
+      if (isLoading && !fromQueue) {
+        const queued: QueuedPrompt = {
+          id: generateId(),
+          text: textToSend,
+          attachments,
+          annotations: [...annotations],
+          device,
+          createdAt: Date.now(),
+        };
+        setQueuedPrompts((previous) => [...previous, queued]);
+        setQueuePaused(false);
+        if (overrideInput === undefined) {
+          setInput('');
+          setPendingAnnotations([]);
+          setIsAnnotating(false);
+        }
+        notify('Added to the queue. It starts when the current build finishes.', 'success');
+        return;
+      }
+
+      if (isLoading && fromQueue) return;
+
+      if (!textToSend) {
+        textToSend = attachments.length
+          ? promptForAttachments(attachments)
+          : 'Improve the areas marked in the preview with one specific, tasteful change. Do not redesign the whole page.';
+      }
+
+      setQueuePaused(false);
 
       const context: string[] = [];
-      if (hasAnnotations) {
-        for (const annotation of pendingAnnotations) {
-          context.push(
-            `[CONTEXT: User clicked ${Math.round(annotation.x)}% across and ${Math.round(
-              annotation.y,
-            )}% down the preview. Pay special attention to that region.]`,
-          );
-        }
+      for (const annotation of annotations) {
+        context.push(
+          `[CONTEXT: User clicked ${Math.round(annotation.x)}% across and ${Math.round(
+            annotation.y,
+          )}% down the preview. Pay special attention to that region.]`,
+        );
       }
-      context.push(`[CONTEXT: The preview is being viewed in ${previewDevice.toUpperCase()} mode.]`);
+      context.push(`[CONTEXT: The preview is being viewed in ${device.toUpperCase()} mode.]`);
       textToSend = `${textToSend}\n\n${context.join('\n')}`.trim();
 
       const userMessage: Message = {
@@ -367,7 +484,7 @@ const App: React.FC = () => {
 
       setMessages((previous) => [...previous, userMessage]);
       setShowHome(false);
-      if (!overrideInput) {
+      if (!fromQueue && overrideInput === undefined) {
         setInput('');
         setPendingAnnotations([]);
         setIsAnnotating(false);
@@ -380,7 +497,19 @@ const App: React.FC = () => {
 
       setMessages((previous) => [
         ...previous,
-        { id: assistantMessageId, role: 'assistant', content: '', timestamp: startTime },
+        {
+          id: assistantMessageId,
+          role: 'assistant',
+          content: '',
+          timestamp: startTime,
+          status: 'streaming',
+          steps: initialBuildSteps(
+            textToSend,
+            attachments,
+            providerDefinition.label,
+            runSettings.model,
+          ),
+        },
       ]);
 
       abortControllerRef.current = new AbortController();
@@ -393,8 +522,81 @@ const App: React.FC = () => {
         .filter(Boolean)
         .join('\n\n');
 
+      const updateStep = (
+        stepId: string,
+        state: BuildStep['state'],
+        detail?: string,
+      ) => {
+        setMessages((previous) =>
+          previous.map((message) => {
+            if (message.id !== assistantMessageId) return message;
+            return {
+              ...message,
+              steps: (message.steps ?? []).map((step) =>
+                step.id === stepId
+                  ? {
+                      ...step,
+                      state,
+                      ...(detail === undefined ? {} : { detail }),
+                      at: state === 'active' ? Date.now() : step.at,
+                    }
+                  : step,
+              ),
+            };
+          }),
+        );
+      };
+
+      const finishSteps = (
+        finalFiles: FileMap,
+        latency: number,
+        failed = false,
+      ) => {
+        const count = Object.keys(finalFiles).length;
+        setMessages((previous) =>
+          previous.map((message) => {
+            if (message.id !== assistantMessageId) return message;
+            return {
+              ...message,
+              steps: (message.steps ?? []).map((step) => {
+                if (step.id === 'stream') {
+                  return { ...step, state: failed && step.state === 'active' ? 'error' : 'done' };
+                }
+                if (step.id === 'files') {
+                  return {
+                    ...step,
+                    state: failed && step.state === 'active' ? 'error' : 'done',
+                    detail:
+                      count > 0
+                        ? `${count} file${count === 1 ? '' : 's'} ready, preview synced`
+                        : 'No files in this reply',
+                  };
+                }
+                if (step.id === 'finish') {
+                  return {
+                    ...step,
+                    state: failed && step.state === 'active' ? 'error' : 'done',
+                    detail: failed
+                      ? undefined
+                      : count > 0
+                        ? `Done in ${(latency / 1000).toFixed(1)}s`
+                        : 'Answered without changing files',
+                  };
+                }
+                if (step.state === 'active' || step.state === 'pending') {
+                  return { ...step, state: failed ? 'stopped' : 'done' };
+                }
+                return step;
+              }),
+            };
+          }),
+        );
+      };
+
       try {
         let accumulatedText = '';
+        let lastFileCount = 0;
+        let lastPaint = 0;
 
         await sendChat({
           provider,
@@ -413,6 +615,17 @@ const App: React.FC = () => {
           runSettings,
           signal: abortControllerRef.current.signal,
           customBaseUrl,
+          onStage: (stage) => {
+            if (stage === 'sending') updateStep('connect', 'active');
+            if (stage === 'connected') {
+              updateStep('connect', 'done');
+              updateStep('stream', 'active', 'Connected. Waiting for the first token…');
+            }
+            if (stage === 'done') {
+              updateStep('stream', 'done');
+              updateStep('files', 'active', 'Reading the generated files…');
+            }
+          },
           onChunk: (chunk) => {
             accumulatedText = chunk;
             setMessages((previous) =>
@@ -424,44 +637,107 @@ const App: React.FC = () => {
             );
 
             const files = parseGeneratedFiles(accumulatedText);
-            if (Object.keys(files).length > 0) setCurrentFiles(files);
+            const fileCount = Object.keys(files).length;
+            if (fileCount > 0) {
+              setCurrentFiles(files);
+              if (fileCount !== lastFileCount) {
+                updateStep('files', 'active', `${fileCount} file${fileCount === 1 ? '' : 's'} detected…`);
+                lastFileCount = fileCount;
+              }
+            }
+
+            const now = Date.now();
+            if (now - lastPaint > 500) {
+              lastPaint = now;
+              updateStep(
+                'stream',
+                'active',
+                `Receiving code · ${Math.max(1, Math.round(accumulatedText.length / 1024))} KB`,
+              );
+            }
           },
         });
 
         const latency = Date.now() - startTime;
-        setMessages((previous) =>
-          previous.map((message) =>
-            message.id === assistantMessageId ? { ...message, latency } : message,
-          ),
-        );
-
         const files = parseGeneratedFiles(accumulatedText);
-        if (Object.keys(files).length > 0) {
+        const fileCount = Object.keys(files).length;
+        const followUps = parseFollowUps(accumulatedText);
+        const warning =
+          fileCount === 0
+            ? 'No files were written in this reply. If you expected a website, ask for it directly or check the model and token limit in Settings.'
+            : undefined;
+
+        if (fileCount > 0) {
           pushVersion(files, versionLabel(textToSend), textToSend);
           setCurrentFiles(files);
         }
+
+        setMessages((previous) =>
+          previous.map((message) =>
+            message.id === assistantMessageId
+              ? {
+                  ...message,
+                  content: accumulatedText,
+                  latency,
+                  status: 'done',
+                  followUps,
+                  warning,
+                }
+              : message,
+          ),
+        );
+        finishSteps(files, latency);
       } catch (error) {
         const failure = error as Error;
-        if (failure.name !== 'AbortError') {
-          const detail = failure.message?.trim();
-          const message = detail
-            ? `Error: ${detail}`
-            : `Error: Could not reach ${providerDefinition.label}. Check your key and your connection.`;
+        const latency = Date.now() - startTime;
+        const aborted = failure.name === 'AbortError';
+
+        if (aborted) {
           setMessages((previous) =>
-            previous.map((item) =>
-              item.id === assistantMessageId
-                ? { ...item, content: message, latency: Date.now() - startTime }
-                : item,
+            previous.map((message) =>
+              message.id === assistantMessageId
+                ? {
+                    ...message,
+                    content:
+                      message.content ||
+                      'Stopped before the model finished. The partial result, if any, is above.',
+                    latency,
+                    status: 'stopped',
+                    steps: (message.steps ?? []).map((step) =>
+                      step.state === 'active'
+                        ? { ...step, state: 'stopped' }
+                        : step.state === 'pending'
+                          ? { ...step, state: 'stopped' }
+                          : step,
+                    ),
+                  }
+                : message,
             ),
           );
         } else {
+          const detail = failure.message?.trim();
+          const message = detail
+            ? detail
+            : `Could not reach ${providerDefinition.label}. Check your key and your connection.`;
           setMessages((previous) =>
             previous.map((item) =>
-              item.id === assistantMessageId && !item.content
-                ? { ...item, content: 'Stopped before the model answered.' }
+              item.id === assistantMessageId
+                ? {
+                    ...item,
+                    latency,
+                    status: 'error',
+                    error: message,
+                    steps: (item.steps ?? []).map((step) =>
+                      step.state === 'active'
+                        ? { ...step, state: 'error', detail: message }
+                        : step,
+                    ),
+                  }
                 : item,
             ),
           );
+          setQueuePaused(true);
+          notify('Build failed. The exact reason is in the build log.', 'error');
         }
       } finally {
         setIsLoading(false);
@@ -491,10 +767,86 @@ const App: React.FC = () => {
     ],
   );
 
+  /*
+   * The queue drains one prompt at a time after a successful build. It stays
+   * paused after an error or a manual stop, so a failing provider cannot be
+   * hammered with every queued request in a silent loop.
+   */
+  useEffect(() => {
+    if (isLoading || queuePaused || queuedPrompts.length === 0) return;
+    if (provider !== 'custom' && !hasKey) {
+      setQueuePaused(true);
+      return;
+    }
+
+    const [next, ...rest] = queuedPrompts;
+    setQueuedPrompts(rest);
+    void handleSendMessage(next.attachments, next.text, {
+      annotations: next.annotations,
+      device: next.device,
+      fromQueue: true,
+    });
+  }, [hasKey, handleSendMessage, isLoading, provider, queuePaused, queuedPrompts]);
+
   const handleStop = () => {
+    const activeId = activeAssistantRef.current;
     abortControllerRef.current?.abort();
     abortControllerRef.current = null;
     setIsLoading(false);
+
+    if (activeId) {
+      setMessages((previous) =>
+        previous.map((message) =>
+          message.id === activeId
+            ? {
+                ...message,
+                content:
+                  message.content ||
+                  'Stopped before the model answered. Nothing was written to the preview.',
+                status: 'stopped',
+                steps: (message.steps ?? []).map((step) =>
+                  step.state === 'active' || step.state === 'pending'
+                    ? { ...step, state: 'stopped' }
+                    : step,
+                ),
+              }
+            : message,
+        ),
+      );
+    }
+
+    if (queuedPrompts.length > 0) {
+      setQueuePaused(true);
+      notify(
+        `Build stopped. ${queuedPrompts.length} queued message${
+          queuedPrompts.length === 1 ? ' stays' : 's stay'
+        } paused — resume when you are ready.`,
+        'info',
+      );
+    } else {
+      notify('Build stopped.', 'info');
+    }
+  };
+
+  const removeQueuedPrompt = (id: string) => {
+    setQueuedPrompts((previous) => previous.filter((prompt) => prompt.id !== id));
+  };
+
+  const clearQueue = () => {
+    const count = queuedPrompts.length;
+    setQueuedPrompts([]);
+    setQueuePaused(false);
+    if (count > 0) notify('Queue cleared.', 'success');
+  };
+
+  const resumeQueue = () => {
+    if (provider !== 'custom' && !hasKey) {
+      setPanel('settings');
+      notify(`Add a ${providerDefinition.label} key before resuming.`, 'info');
+      return;
+    }
+    setQueuePaused(false);
+    notify('Queue resumed.', 'success');
   };
 
   /* New project ----------------------------------------------------------- */
@@ -504,6 +856,9 @@ const App: React.FC = () => {
     setMessages([]);
     setCurrentFiles({});
     setInput('');
+    setQueuedPrompts([]);
+    setQueuePaused(false);
+    setSeed(null);
     setPendingAnnotations([]);
     setIsAnnotating(false);
     setIsLoading(false);
@@ -715,13 +1070,27 @@ const App: React.FC = () => {
 
   /* Navigation ------------------------------------------------------------ */
 
-  const enterStudio = () => {
+  const enterStudio = (nextSeed?: StudioSeed) => {
     setShowLanding(false);
+    setPanel('none');
+    setMobileNavOpen(false);
     try {
       window.localStorage.setItem(STORAGE_VISITED, '1');
     } catch {
       // Still usable for this session.
     }
+
+    if (nextSeed) {
+      setSeed({ ...nextSeed, id: nextSeed.id ?? generateId() });
+      if (nextSeed.prompt) setInput(nextSeed.prompt);
+      setShowHome(true);
+      setViewMode(ViewMode.SPLIT);
+      window.setTimeout(() => {
+        document.querySelector<HTMLTextAreaElement>('#composer-input')?.focus();
+      }, 90);
+      return;
+    }
+
     if (Object.keys(currentFiles).length === 0 && messages.length === 0) setShowHome(true);
   };
 
@@ -859,6 +1228,7 @@ const App: React.FC = () => {
           projectName={projectName}
           onProjectNameChange={setProjectName}
           isGenerating={isLoading}
+          onStop={handleStop}
           hasFiles={hasFiles}
           viewMode={viewMode}
           onViewModeChange={setViewMode}
@@ -876,15 +1246,9 @@ const App: React.FC = () => {
               hasWork={hasFiles}
               input={input}
               setInput={setInput}
-              onSend={(attachments) => void handleSendMessage(attachments)}
+              onSend={(attachments, text) => void handleSendMessage(attachments, text)}
               isLoading={isLoading}
               onStop={handleStop}
-              isAnnotating={isAnnotating}
-              setIsAnnotating={setIsAnnotating}
-              pendingAnnotations={pendingAnnotations}
-              onRemoveAnnotation={(index) =>
-                setPendingAnnotations((previous) => previous.filter((_, i) => i !== index))
-              }
               versions={versions}
               onOpenHistory={() => togglePanel('history')}
               onContinue={() => {
@@ -900,6 +1264,18 @@ const App: React.FC = () => {
               hasKey={hasKey}
               modelPicker={modelPicker}
               onImportProject={() => projectInputRef.current?.click()}
+              initialLink={seed?.link}
+              initialAttachments={seed?.attachments}
+              onInitialLinkConsumed={() =>
+                setSeed((previous) =>
+                  previous ? { ...previous, link: undefined } : previous,
+                )
+              }
+              onInitialAttachmentsConsumed={() =>
+                setSeed((previous) =>
+                  previous ? { ...previous, attachments: undefined } : previous,
+                )
+              }
             />
           ) : (
             <>
@@ -909,7 +1285,7 @@ const App: React.FC = () => {
                     messages={messages}
                     input={input}
                     setInput={setInput}
-                    onSend={(attachments) => void handleSendMessage(attachments)}
+                    onSend={(attachments, text) => void handleSendMessage(attachments, text)}
                     isLoading={isLoading}
                     onStop={handleStop}
                     isAnnotating={isAnnotating}
@@ -918,11 +1294,13 @@ const App: React.FC = () => {
                     onRemoveAnnotation={(index) =>
                       setPendingAnnotations((previous) => previous.filter((_, i) => i !== index))
                     }
-                    systemInstruction={systemInstruction}
-                    setSystemInstruction={setSystemInstruction}
-                    isThinking={isThinking}
-                    setIsThinking={setIsThinking}
+                    queuedPrompts={queuedPrompts}
+                    queuePaused={queuePaused}
+                    onRemoveQueued={removeQueuedPrompt}
+                    onClearQueue={clearQueue}
+                    onResumeQueue={resumeQueue}
                     onClear={requestNewProject}
+                    onImportProject={() => projectInputRef.current?.click()}
                   />
                 </section>
               )}
@@ -1036,6 +1414,10 @@ const App: React.FC = () => {
                 savedProviders={savedProviders}
                 onSaveKey={saveKey}
                 onForgetKey={forgetKey}
+                systemInstruction={systemInstruction}
+                onSystemInstructionChange={setSystemInstruction}
+                isThinking={isThinking}
+                onThinkingChange={setIsThinking}
                 onClose={() => setPanel('none')}
               />
             )}

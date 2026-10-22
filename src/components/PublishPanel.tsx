@@ -26,12 +26,13 @@ interface PublishPanelProps {
   onBusyChange?: (busy: boolean) => void;
 }
 
-type Section = 'download' | 'github' | 'vercel' | 'domain';
+type Section = 'download' | 'github' | 'vercel' | 'cloudflare' | 'domain';
 
 const SECTIONS: Array<{ value: Section; label: string; icon: IconName }> = [
   { value: 'download', label: 'Download', icon: 'download' },
   { value: 'github', label: 'GitHub', icon: 'github' },
   { value: 'vercel', label: 'Vercel', icon: 'vercel' },
+  { value: 'cloudflare', label: 'Cloudflare', icon: 'zap' },
   { value: 'domain', label: 'Domain', icon: 'globe' },
 ];
 
@@ -146,6 +147,13 @@ const PublishPanel: React.FC<PublishPanelProps> = ({
   const [figmaBusy, setFigmaBusy] = useState(false);
   const [figmaStatus, setFigmaStatus] = useState<PublishResult | null>(null);
 
+  const [alsoCloudflare, setAlsoCloudflare] = useState(false);
+  const [cfProject, setCfProject] = useState(
+    projectName.toLowerCase().replace(/[^a-z0-9-]/g, '-').replace(/-+/g, '-').slice(0, 52) ||
+      'my-site',
+  );
+  const [cfCopied, setCfCopied] = useState(false);
+
   const fileNames = useMemo(
     () =>
       Object.keys(files).sort((a, b) => {
@@ -230,8 +238,11 @@ const PublishPanel: React.FC<PublishPanelProps> = ({
       const anchor = document.createElement('a');
       anchor.href = url;
       anchor.download = `${projectName.toLowerCase().replace(/[^a-z0-9]+/g, '-') || 'project'}.zip`;
+      document.body.appendChild(anchor);
       anchor.click();
-      URL.revokeObjectURL(url);
+      anchor.remove();
+      // Revoking immediately can cancel the download in some browsers.
+      window.setTimeout(() => URL.revokeObjectURL(url), 1500);
       setStatus({ ok: true, message: `Downloaded ${fileNames.length} files as a ZIP.` });
     } catch (error) {
       setStatus({ ok: false, message: `Could not build the ZIP: ${(error as Error).message}` });
@@ -256,6 +267,7 @@ const PublishPanel: React.FC<PublishPanelProps> = ({
       const result = await publishToGitHub(githubToken.trim(), githubOwner.trim(), githubRepo.trim(), files, {
         makePublic,
         customDomain: customDomain || undefined,
+        cloudflareProject: alsoCloudflare ? cfProject.trim() || 'my-site' : undefined,
       });
       setStatus(result);
       if (result.ok) rememberGitHub(githubOwner.trim(), githubRepo.trim());
@@ -563,6 +575,50 @@ const PublishPanel: React.FC<PublishPanelProps> = ({
                 </span>
               </label>
 
+              <label className="flex cursor-pointer items-start gap-2 rounded-lg border border-line bg-surface-2 px-2.5 py-2">
+                <input
+                  type="checkbox"
+                  checked={alsoCloudflare}
+                  onChange={(event) => setAlsoCloudflare(event.target.checked)}
+                  className="mt-0.5 h-3 w-3 accent-[var(--accent)]"
+                />
+                <span>
+                  <span className="block text-[10.5px] font-medium text-ink">
+                    Also add a Cloudflare Pages deploy workflow
+                  </span>
+                  <span className="block text-[9px] text-ink-faint">
+                    Commits an Actions workflow that deploys this repository to your Cloudflare
+                    account on every push. Add{' '}
+                    <span className="font-mono">CLOUDFLARE_API_TOKEN</span> and{' '}
+                    <span className="font-mono">CLOUDFLARE_ACCOUNT_ID</span> as repository secrets
+                    to activate it.
+                  </span>
+                </span>
+              </label>
+
+              {alsoCloudflare && (
+                <div>
+                  <label
+                    htmlFor="github-cloudflare-project"
+                    className="mb-1 block text-[9.5px] font-semibold text-ink-faint"
+                  >
+                    Cloudflare Pages project name
+                  </label>
+                  <input
+                    id="github-cloudflare-project"
+                    value={cfProject}
+                    onChange={(event) => setCfProject(event.target.value)}
+                    autoComplete="off"
+                    spellCheck={false}
+                    className="input"
+                  />
+                  <p className="mt-1 text-[9px] leading-relaxed text-ink-faint">
+                    Best for static HTML projects and Vite builds. A Next.js project needs a
+                    static export before the workflow can deploy it.
+                  </p>
+                </div>
+              )}
+
               {customDomain && (
                 <p className="flex items-start gap-1.5 rounded-lg border border-success/25 bg-success/[0.06] px-2.5 py-2 text-[9.5px] leading-relaxed text-ink">
                   <Icon name="globe" size={10} className="mt-0.5 shrink-0 text-success" />
@@ -659,6 +715,106 @@ const PublishPanel: React.FC<PublishPanelProps> = ({
             <div className="rounded-xl border border-line bg-surface-2/60 px-3 py-2.5 text-[9.5px] leading-relaxed text-ink-faint">
               Add the custom domain in Vercel after the first deploy. The Domain tab shows the
               records to enter — or use Vercel&apos;s own domain flow, which can add them for you.
+            </div>
+          </div>
+        )}
+
+        {section === 'cloudflare' && (
+          <div className="space-y-4">
+            <SectionHeading
+              icon="zap"
+              title="Deploy to Cloudflare Pages"
+              body="Cloudflare goes straight into your own account. Because Cloudflare's API sends no browser CORS headers, the panel hands you a one-command deploy instead of pretending a hidden request succeeded."
+            />
+
+            <div className="rounded-xl border border-line bg-surface-2/70 px-3 py-2.5 text-[9.5px] leading-relaxed text-ink-muted">
+              <p className="flex items-start gap-1.5">
+                <Icon name="info" size={10} className="mt-0.5 shrink-0 text-accent" />
+                <span>
+                  Your files never pass through anyone else. Unzip the download, run the two
+                  commands from that folder, and Wrangler uploads directly to your Cloudflare
+                  account. No backend of ours is involved.
+                </span>
+              </p>
+            </div>
+
+            <div>
+              <label
+                htmlFor="cloudflare-name"
+                className="mb-1 block text-[9.5px] font-semibold text-ink-faint"
+              >
+                Cloudflare Pages project name
+              </label>
+              <input
+                id="cloudflare-name"
+                value={cfProject}
+                onChange={(event) => setCfProject(event.target.value)}
+                autoComplete="off"
+                spellCheck={false}
+                className="input"
+              />
+            </div>
+
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between">
+                <span className="text-[9.5px] font-semibold text-ink-faint">
+                  Run in the unzipped folder
+                </span>
+                <button
+                  onClick={async () => {
+                    const commands = `npx wrangler pages project create ${cfProject || 'my-site'} --production-branch=main\nnpx wrangler pages deploy . --project-name=${cfProject || 'my-site'}`;
+                    const ok = await copyText(commands);
+                    if (ok) {
+                      setCfCopied(true);
+                      window.setTimeout(() => setCfCopied(false), 1800);
+                    }
+                  }}
+                  className="inline-flex items-center gap-1 text-[10px] font-semibold text-accent hover:underline"
+                >
+                  <Icon name={cfCopied ? 'check' : 'copy'} size={10} />
+                  {cfCopied ? 'Copied' : 'Copy commands'}
+                </button>
+              </div>
+              <pre className="scroll-thin overflow-x-auto rounded-xl border border-line bg-[#12100f] px-3 py-2.5 font-mono text-[9.5px] leading-relaxed text-[#f0e7db]">
+{`npx wrangler pages project create ${cfProject || 'my-site'} --production-branch=main
+npx wrangler pages deploy . --project-name=${cfProject || 'my-site'}`}
+              </pre>
+            </div>
+
+            <div className="flex flex-col gap-1.5 sm:flex-row">
+              <button
+                onClick={() => void handleDownload()}
+                disabled={busy}
+                data-loading={busy ? 'true' : 'false'}
+                className="btn btn-md btn-primary flex-1"
+              >
+                <Icon name="download" size={12} />
+                Download the site ZIP
+              </button>
+              <a
+                href="https://developers.cloudflare.com/pages/get-started/direct-upload/"
+                target="_blank"
+                rel="noreferrer noopener"
+                className="btn btn-md btn-secondary flex-1"
+              >
+                <Icon name="external" size={12} />
+                Direct upload guide
+              </a>
+            </div>
+
+            {status && <StatusCard result={status} />}
+
+            <div className="rounded-xl border border-line bg-surface-2/60 px-3 py-2.5 text-[9.5px] leading-relaxed text-ink-faint">
+              <p className="font-semibold text-ink-muted">Want every future build to deploy itself?</p>
+              <p className="mt-1">
+                In the GitHub tab, tick “Also add a Cloudflare Pages deploy workflow”. The push then
+                includes a ready Actions workflow; add{' '}
+                <span className="font-mono">CLOUDFLARE_API_TOKEN</span> and{' '}
+                <span className="font-mono">CLOUDFLARE_ACCOUNT_ID</span> as repository secrets and
+                every push deploys to this project. Alternatively, connect the repository to
+                Cloudflare Pages with no build command and the output directory set to{' '}
+                <span className="font-mono">/</span>.
+              </p>
             </div>
           </div>
         )}

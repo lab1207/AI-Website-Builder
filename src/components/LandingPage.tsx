@@ -3,14 +3,18 @@ import Icon, { type IconName } from './Icon';
 import Logo from './Logo';
 import ProviderMark from './ProviderMark';
 import { PROVIDERS } from '../lib/providers';
+import { normalizeWebsiteUrl } from '../lib/reference';
+import type { Attachment, StudioSeed } from '../types';
 
 interface LandingPageProps {
   theme: 'light' | 'dark';
   onToggleTheme: () => void;
-  onEnter: () => void;
+  onEnter: (seed?: StudioSeed) => void;
   /** True when this browser already has a project or has opened the studio. */
   returning: boolean;
 }
+
+type SourceTab = 'describe' | 'link' | 'screenshot' | 'code';
 
 const Reveal: React.FC<{
   children: React.ReactNode;
@@ -56,11 +60,300 @@ const Reveal: React.FC<{
   );
 };
 
+const MAX_LANDING_IMAGE_BYTES = 8 * 1024 * 1024;
+
+const SOURCE_TABS: Array<{ value: SourceTab; label: string; icon: IconName }> = [
+  { value: 'describe', label: 'Describe', icon: 'sparkles' },
+  { value: 'screenshot', label: 'Screenshot', icon: 'image' },
+  { value: 'link', label: 'Link', icon: 'link' },
+  { value: 'code', label: 'Code', icon: 'code' },
+];
+
+/**
+ * The landing-page on-ramp. Whichever source a visitor has — a sentence, a
+ * screenshot, a live URL, or existing code — it goes straight into the same
+ * studio with that source already attached.
+ */
+const SourceStart: React.FC<{ onEnter: (seed?: StudioSeed) => void }> = ({ onEnter }) => {
+  const [tab, setTab] = useState<SourceTab>('describe');
+  const [prompt, setPrompt] = useState('');
+  const [link, setLink] = useState('');
+  const [code, setCode] = useState('');
+  const [codeName, setCodeName] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const [dragActive, setDragActive] = useState(false);
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  const startFromImages = async (files: File[]) => {
+    const images = files.filter((file) => file.type.startsWith('image/'));
+    if (images.length === 0) {
+      if (files.length > 0) {
+        setError('That file is not an image. Use a PNG, JPG, WebP, GIF, or screenshot.');
+      }
+      return;
+    }
+    const oversized = images.find((file) => file.size > MAX_LANDING_IMAGE_BYTES);
+    if (oversized) {
+      setError(`${oversized.name} is larger than 8 MB. Compress it and try again.`);
+      return;
+    }
+
+    setBusy(true);
+    setError('');
+    try {
+      const attachments: Attachment[] = [];
+      for (const file of images.slice(0, 10)) {
+        const dataUrl = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(String(reader.result ?? ''));
+          reader.onerror = () => reject(new Error('read failed'));
+          reader.readAsDataURL(file);
+        });
+        attachments.push({
+          type: 'image',
+          content: dataUrl,
+          mimeType: file.type || 'image/png',
+          name: file.name || 'screenshot.png',
+          size: file.size,
+        });
+      }
+      onEnter({ attachments });
+    } catch {
+      setError('Could not read that screenshot. Try another file.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const submitDescribe = () => {
+    if (!prompt.trim()) {
+      setError('Describe the site in a sentence first.');
+      return;
+    }
+    onEnter({ prompt: prompt.trim() });
+  };
+
+  const submitLink = () => {
+    const normalized = normalizeWebsiteUrl(link);
+    if (!normalized) {
+      setError('Enter a full address, such as studio.example.com.');
+      return;
+    }
+    onEnter({ link: normalized });
+  };
+
+  const submitCode = () => {
+    if (!code.trim()) {
+      setError('Paste some HTML, CSS, JS, or component code first.');
+      return;
+    }
+    onEnter({
+      attachments: [
+        {
+          type: 'text',
+          content: code,
+          mimeType: 'text/plain',
+          name: codeName.trim() || 'pasted-source.txt',
+          size: new Blob([code]).size,
+        },
+      ],
+    });
+  };
+
+  return (
+    <div className="mt-8 w-full max-w-[560px]">
+      <div
+        className="overflow-hidden rounded-[22px] border border-line bg-surface/90 shadow-[var(--shadow-md)] backdrop-blur transition-colors"
+        onDragOver={(event) => {
+          if (event.dataTransfer.types.includes('Files')) {
+            event.preventDefault();
+            setDragActive(true);
+          }
+        }}
+        onDragLeave={() => setDragActive(false)}
+        onDrop={(event) => {
+          event.preventDefault();
+          setDragActive(false);
+          void startFromImages(Array.from(event.dataTransfer.files ?? []));
+        }}
+      >
+        <div className="flex gap-1 border-b border-line px-2 pt-2" role="tablist" aria-label="Source type">
+          {SOURCE_TABS.map((option) => (
+            <button
+              key={option.value}
+              role="tab"
+              aria-selected={tab === option.value}
+              onClick={() => {
+                setTab(option.value);
+                setError('');
+              }}
+              className={`inline-flex items-center gap-1.5 rounded-t-lg px-2.5 py-2 text-[11px] font-semibold transition-colors ${
+                tab === option.value
+                  ? 'bg-canvas text-ink shadow-[inset_0_-2px_0_var(--accent)]'
+                  : 'text-ink-faint hover:text-ink'
+              }`}
+            >
+              <Icon name={option.icon} size={11} />
+              {option.label}
+            </button>
+          ))}
+        </div>
+
+        <div className="relative p-3">
+          {dragActive && (
+            <div className="pointer-events-none absolute inset-1 z-10 flex flex-col items-center justify-center rounded-xl border border-dashed border-accent bg-surface/95 text-center">
+              <Icon name="image" size={16} className="text-accent" />
+              <p className="mt-1 text-[11px] font-semibold text-ink">Drop the screenshot</p>
+            </div>
+          )}
+
+          {tab === 'describe' && (
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
+              <label htmlFor="landing-prompt" className="sr-only">
+                Describe the website
+              </label>
+              <textarea
+                id="landing-prompt"
+                value={prompt}
+                onChange={(event) => setPrompt(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter' && !event.shiftKey) {
+                    event.preventDefault();
+                    submitDescribe();
+                  }
+                }}
+                rows={2}
+                placeholder="A calm portfolio for a furniture studio, warm paper tones…"
+                className="scroll-thin min-h-[54px] flex-1 resize-none rounded-xl border border-line bg-canvas px-3 py-2.5 text-[13px] leading-relaxed text-ink outline-none placeholder:text-ink-faint focus:border-accent/40"
+              />
+              <button onClick={submitDescribe} className="btn btn-md btn-primary shrink-0">
+                Start building
+                <Icon name="arrow-right" size={13} />
+              </button>
+            </div>
+          )}
+
+          {tab === 'screenshot' && (
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+              <input
+                ref={fileRef}
+                type="file"
+                accept="image/*"
+                multiple
+                className="hidden"
+                onChange={(event) => {
+                  void startFromImages(Array.from(event.target.files ?? []));
+                  if (fileRef.current) fileRef.current.value = '';
+                }}
+              />
+              <button
+                onClick={() => fileRef.current?.click()}
+                disabled={busy}
+                className="flex flex-1 items-center gap-3 rounded-xl border border-dashed border-line-strong bg-canvas px-3 py-2.5 text-left transition-colors hover:border-accent/40"
+              >
+                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-accent-soft text-accent">
+                  <Icon name={busy ? 'refresh' : 'image'} size={14} className={busy ? 'animate-spin' : ''} />
+                </span>
+                <span>
+                  <span className="block text-[12px] font-semibold text-ink">
+                    {busy ? 'Reading the screenshot…' : 'Choose a screenshot'}
+                  </span>
+                  <span className="mt-0.5 block text-[10px] text-ink-faint">
+                    Or drop one here. Multiple views work too.
+                  </span>
+                </span>
+              </button>
+            </div>
+          )}
+
+          {tab === 'link' && (
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
+              <label htmlFor="landing-link" className="sr-only">
+                Website address
+              </label>
+              <input
+                id="landing-link"
+                type="url"
+                value={link}
+                onChange={(event) => setLink(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter') {
+                    event.preventDefault();
+                    submitLink();
+                  }
+                }}
+                placeholder="https://studio.example.com"
+                spellCheck={false}
+                autoComplete="url"
+                className="input h-11 flex-1"
+              />
+              <button onClick={submitLink} className="btn btn-md btn-primary shrink-0">
+                Capture &amp; rebuild
+                <Icon name="arrow-right" size={13} />
+              </button>
+            </div>
+          )}
+
+          {tab === 'code' && (
+            <div className="flex flex-col gap-2">
+              <div className="flex gap-2">
+                <input
+                  value={codeName}
+                  onChange={(event) => setCodeName(event.target.value)}
+                  placeholder="index.html (optional)"
+                  spellCheck={false}
+                  aria-label="Filename for the pasted code"
+                  className="input h-9 flex-1 font-mono text-[11px]"
+                />
+                <button onClick={submitCode} className="btn btn-sm btn-primary shrink-0">
+                  Open with this code
+                  <Icon name="arrow-right" size={11} />
+                </button>
+              </div>
+              <textarea
+                value={code}
+                onChange={(event) => setCode(event.target.value)}
+                rows={4}
+                placeholder="Paste HTML, CSS, JS, JSX, or a config file…"
+                spellCheck={false}
+                aria-label="Paste existing code"
+                className="scroll-thin w-full resize-none rounded-xl border border-line bg-canvas p-2.5 font-mono text-[11px] leading-relaxed text-ink outline-none placeholder:text-ink-faint focus:border-accent/40"
+              />
+            </div>
+          )}
+
+          {error && (
+            <p role="alert" className="mt-2 text-[10.5px] font-medium text-danger">
+              {error}
+            </p>
+          )}
+        </div>
+      </div>
+
+      <p className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] text-ink-faint">
+        <span className="inline-flex items-center gap-1">
+          <Icon name="check" size={10} className="text-success" />
+          Starts the build immediately
+        </span>
+        <span className="inline-flex items-center gap-1">
+          <Icon name="check" size={10} className="text-success" />
+          Ask and refine while it runs
+        </span>
+        <span className="inline-flex items-center gap-1">
+          <Icon name="check" size={10} className="text-success" />
+          ZIP, GitHub, Vercel, Cloudflare
+        </span>
+      </p>
+    </div>
+  );
+};
+
 const featureCards = [
   {
     icon: 'monitor' as const,
-    title: 'A live sandbox, not a slideshow',
-    body: 'Every generation renders in an isolated iframe as it streams. Click links, submit the form, resize to phone width. The preview is the site.',
+    title: 'A screenshot in, a website out',
+    body: 'Bring a screenshot, a live URL, a folder of code, or a sentence. The build trail shows every real stage — connecting, writing, assembling files — and the preview updates as files arrive. No looping progress bar.',
   },
   {
     icon: 'cursor' as const,
@@ -84,8 +377,13 @@ const featureCards = [
   },
   {
     icon: 'globe' as const,
-    title: 'Publish and point a domain',
-    body: 'Download a ZIP, push to GitHub, or deploy to Vercel. Add a custom domain with generated DNS records and a CNAME that travels with the project.',
+    title: 'Deploy to your own accounts',
+    body: 'Download a ZIP, push to GitHub Pages, or deploy straight to Vercel or Cloudflare Pages with your own token. Custom domains get generated DNS records and a CNAME.',
+  },
+  {
+    icon: 'message' as const,
+    title: 'Keep talking while it builds',
+    body: 'Send another instruction mid-build and it queues instead of bouncing. The model can ask when a decision genuinely matters, and every finished build offers concrete next steps you can click.',
   },
 ];
 
@@ -119,18 +417,18 @@ const projectTypes = [
 const steps = [
   {
     number: '01',
-    title: 'Describe the site',
-    body: 'A sentence is enough. Choose a provider, pick a model, and paste a screenshot if you have one.',
+    title: 'Bring a source',
+    body: 'A screenshot, a live URL, existing code, a project ZIP, or one sentence. It all lands in the same composer and starts the build.',
   },
   {
     number: '02',
-    title: 'Shape it in the open',
-    body: 'Watch the code and the preview update together. Point, prompt, compare versions, auto-fix what looks off.',
+    title: 'Refine in the open',
+    body: 'Watch the real build stages, queue your next instructions, click the model’s suggested next steps, and point at anything in the preview.',
   },
   {
     number: '03',
     title: 'Ship it for real',
-    body: 'Download every file, push to GitHub, deploy to Vercel, and connect the domain you already own.',
+    body: 'Export a ZIP, push to GitHub Pages, or deploy to your own Vercel or Cloudflare account — then connect the domain you already own.',
   },
 ];
 
@@ -141,14 +439,19 @@ const faqs = [
       'The builder is open source under GPL-3.0 and runs entirely in your browser. You bring your own model key, so you pay your provider directly — often nothing, because Gemini, OpenRouter, and NVIDIA all have free tiers.',
   },
   {
+    question: 'Can it really rebuild a site from a screenshot or URL?',
+    answer:
+      'Yes, and fidelity is the point: section order, type scale, colours, spacing, imagery, and visible copy are all rebuilt, not approximated. For a URL, the page is captured as a screenshot plus readable text. Those captures use two small public services — image.thum.io (or Microlink) and r.jina.ai — which see the address you enter. The key never leaves your provider call, and if a capture fails you get an explicit reason and can upload a screenshot instead.',
+  },
+  {
     question: 'Where does my API key go?',
     answer:
       'Into this browser’s localStorage, one key per provider. Requests go straight from your tab to the provider you picked. There is no backend of ours to send it to, and a test in CI fails the build if a key is ever committed to the repository.',
   },
   {
-    question: 'Can it build more than a static page?',
+    question: 'What happens if the model fails mid-build?',
     answer:
-      'Yes. Multi-page static sites, React and Vue applications, and Next.js projects with a runnable scaffold. Framework projects also get a self-contained preview.html so you can see the design without running a local build.',
+      'You see it. Rate limits, rejected keys, empty responses, output cut off at the token limit, and idle streams all become a plain message in the build log with the exact reason. Anything queued behind a failed run pauses instead of silently hammering the provider, and you can resume or clear it.',
   },
   {
     question: 'What about custom domains?',
@@ -172,7 +475,7 @@ const LandingPage: React.FC<LandingPageProps> = ({
       <header className="sticky top-0 z-40 border-b border-line/70 bg-canvas/80 backdrop-blur-xl">
         <div className="mx-auto flex h-[68px] max-w-7xl items-center gap-6 px-5 sm:px-8">
           <button
-            onClick={onEnter}
+            onClick={() => onEnter()}
             className="flex shrink-0 items-center gap-2.5"
             aria-label="Open the builder"
           >
@@ -218,7 +521,7 @@ const LandingPage: React.FC<LandingPageProps> = ({
               <Icon name="github" size={15} />
               <span>GitHub</span>
             </a>
-            <button onClick={onEnter} className="btn btn-md btn-primary">
+            <button onClick={() => onEnter()} className="btn btn-md btn-primary">
               {returning ? 'Back to builder' : 'Start building'}
               <Icon name="arrow-right" size={13} />
             </button>
@@ -251,29 +554,30 @@ const LandingPage: React.FC<LandingPageProps> = ({
                 </span>
 
                 <h1 className="display mt-6 text-[46px] leading-[0.96] sm:text-[62px] lg:text-[70px]">
-                  Describe it.
+                  Rebuild a site
                   <br />
-                  Watch it become
+                  from <em>anything</em>.
                   <br />
-                  a <em>real</em> website.
+                  Or describe your own.
                 </h1>
 
                 <p className="mt-6 max-w-[540px] text-[15.5px] leading-relaxed text-ink-muted sm:text-[16.5px]">
-                  Not a mockup. A complete site you can click through, refine by pointing at
-                  it, version, and publish — in HTML, React, Vue, or Next.js. Six AI providers,
-                  your own key, nothing leaving this browser.
+                  Start from a screenshot, a live URL, existing code, a project file, or one
+                  sentence. Your source becomes a real, working site — then you refine it in
+                  conversation while it builds. HTML, React, Vue, or Next.js.
                 </p>
 
-                <div className="mt-8 flex flex-wrap items-center gap-2.5">
-                  <button onClick={onEnter} className="btn btn-lg btn-primary">
-                    {returning ? 'Open your builder' : 'Start building — free'}
-                    <Icon name="arrow-right" size={15} />
+                <SourceStart onEnter={onEnter} />
+
+                {returning && (
+                  <button
+                    onClick={() => onEnter()}
+                    className="btn btn-md btn-secondary mt-4"
+                  >
+                    Open your saved project
+                    <Icon name="arrow-right" size={13} />
                   </button>
-                  <a href="#features" className="btn btn-lg btn-secondary">
-                    See what’s inside
-                    <Icon name="arrow-down" size={14} />
-                  </a>
-                </div>
+                )}
 
                 <div className="mt-5 flex flex-wrap items-center gap-x-5 gap-y-2 text-[11.5px] font-medium text-ink-faint">
                   <span className="inline-flex items-center gap-1.5">
@@ -323,24 +627,46 @@ const LandingPage: React.FC<LandingPageProps> = ({
                       </div>
 
                       <div className="mt-4 space-y-2">
-                        {['Layout planned', 'Sections written', 'Styles polished', 'Preview ready'].map(
-                          (label, index) => (
-                            <div
-                              key={label}
-                              className="flex items-center gap-2 text-[9.5px] text-ink-muted"
-                              style={{ opacity: 1 - index * 0.08 }}
-                            >
+                        {[
+                          ['Brief received', 'done'],
+                          ['Connected to Gemini', 'done'],
+                          ['Writing the site · 12 KB', 'active'],
+                          ['Assembling files', 'pending'],
+                        ].map(([label, state]) => (
+                          <div
+                            key={label}
+                            className={`flex items-center gap-2 text-[9.5px] ${
+                              state === 'active'
+                                ? 'text-accent'
+                                : state === 'pending'
+                                  ? 'text-ink-faint'
+                                  : 'text-ink-muted'
+                            }`}
+                          >
+                            {state === 'done' ? (
                               <span className="flex h-3.5 w-3.5 items-center justify-center rounded-full bg-success/12 text-success">
                                 <Icon name="check" size={8} strokeWidth={2.5} />
                               </span>
-                              {label}
-                            </div>
-                          ),
-                        )}
+                            ) : state === 'active' ? (
+                              <span className="flex h-3.5 w-3.5 items-center justify-center">
+                                <span className="h-2.5 w-2.5 animate-spin rounded-full border border-accent border-t-transparent" />
+                              </span>
+                            ) : (
+                              <span className="flex h-3.5 w-3.5 items-center justify-center">
+                                <span className="h-1.5 w-1.5 rounded-full border border-line-strong" />
+                              </span>
+                            )}
+                            {label}
+                          </div>
+                        ))}
                       </div>
 
-                      <div className="mt-4 flex flex-wrap gap-1">
-                        {['Multi-page', 'Tailwind', 'Custom domain'].map((tag) => (
+                      <div className="mt-3 rounded-lg border border-accent/25 bg-accent-soft/60 px-2 py-1.5 text-[8.5px] leading-snug text-accent">
+                        2 queued: “add pricing” · “darker footer”
+                      </div>
+
+                      <div className="mt-3 flex flex-wrap gap-1">
+                        {['Multi-page', 'Tailwind', 'Vercel'].map((tag) => (
                           <span
                             key={tag}
                             className="rounded-md border border-line bg-surface/70 px-1.5 py-[2px] text-[8.5px] font-semibold text-ink-faint"
@@ -428,13 +754,13 @@ const LandingPage: React.FC<LandingPageProps> = ({
                   </div>
                 </div>
 
-                <div className="absolute -left-3 top-[30%] hidden rounded-xl border border-line bg-surface/95 px-3 py-2 shadow-[var(--shadow-md)] backdrop-blur sm:flex sm:items-center sm:gap-2">
-                  <span className="flex h-6 w-6 items-center justify-center rounded-lg bg-success/12 text-success">
-                    <Icon name="check" size={12} strokeWidth={2.4} />
+                <div className="absolute -bottom-5 left-4 hidden rounded-xl border border-line bg-surface/95 px-3 py-2 shadow-[var(--shadow-md)] backdrop-blur sm:flex sm:items-center sm:gap-2">
+                  <span className="flex h-6 w-6 items-center justify-center rounded-lg bg-accent-soft text-accent">
+                    <Icon name="image" size={12} strokeWidth={2.2} />
                   </span>
                   <div>
-                    <p className="text-[9.5px] font-bold text-ink">3 issues auto-fixed</p>
-                    <p className="text-[8px] text-ink-faint">contrast · spacing · links</p>
+                    <p className="text-[9.5px] font-bold text-ink">Source read</p>
+                    <p className="text-[8px] text-ink-faint">layout · copy · type</p>
                   </div>
                 </div>
 
@@ -667,13 +993,17 @@ const LandingPage: React.FC<LandingPageProps> = ({
                   Also inside
                 </span>
                 {[
-                  'Tailwind output',
+                  'Screenshot → site',
+                  'Live URL capture',
+                  'Code & ZIP intake',
+                  'Prompt queue',
+                  'Build trail',
                   'Version diffs',
+                  'Tailwind output',
                   'Custom domains',
+                  'Vercel deploy',
+                  'Cloudflare Pages',
                   'Figma import',
-                  'Image paste',
-                  'Auto-fix',
-                  'Code explanations',
                   'Sandboxed preview',
                 ].map((item) => (
                   <span
@@ -835,14 +1165,14 @@ const LandingPage: React.FC<LandingPageProps> = ({
               <div className="relative">
                 <span className="eyebrow">The blank page is over</span>
                 <h2 className="display mx-auto mt-4 max-w-[760px] text-[40px] sm:text-[58px]">
-                  Your next site is <em>one sentence</em> away.
+                  Point it at <em>anything</em>. Get a website.
                 </h2>
                 <p className="mx-auto mt-4 max-w-[480px] text-[13.5px] leading-relaxed text-ink-muted">
-                  Bring a screenshot, a rough idea, or nothing but a name. The builder takes it
-                  from there.
+                  A screenshot, an old site, a folder of code, or one sentence. The builder takes
+                  it from there — then keeps refining with you.
                 </p>
                 <div className="mt-7 flex flex-wrap items-center justify-center gap-2.5">
-                  <button onClick={onEnter} className="btn btn-lg btn-primary">
+                  <button onClick={() => onEnter()} className="btn btn-lg btn-primary">
                     Open the builder
                     <Icon name="arrow-right" size={15} />
                   </button>
@@ -876,7 +1206,7 @@ const LandingPage: React.FC<LandingPageProps> = ({
           </div>
 
           <div className="flex flex-wrap items-center gap-x-5 gap-y-2 text-[11px] font-medium text-ink-muted">
-            <button onClick={onEnter} className="transition-colors hover:text-ink">
+            <button onClick={() => onEnter()} className="transition-colors hover:text-ink">
               Builder
             </button>
             <a

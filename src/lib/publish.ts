@@ -30,6 +30,56 @@ export interface GitHubPublishOptions {
   customDomain?: string;
   /** Set to false to push without touching the Pages configuration. */
   enablePages?: boolean;
+  /**
+   * Adds a GitHub Actions workflow that deploys the repository to this
+   * Cloudflare Pages project on every push. The visitor only has to add
+   * CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID as repository secrets.
+   */
+  cloudflareProject?: string;
+}
+
+/**
+ * Builds the Cloudflare Pages workflow that is committed alongside a GitHub
+ * publish. Browser calls to Cloudflare's API are blocked by CORS, so a
+ * workflow in the visitor's own repository is the way to get automatic
+ * deploys into their own Cloudflare account.
+ */
+function cloudflareWorkflow(projectName: string, hasPackage: boolean): string {
+  const install = hasPackage
+    ? [
+        '      - name: Install dependencies',
+        '        run: npm ci',
+        '      - name: Build',
+        '        run: npm run build',
+        '',
+      ].join('\n')
+    : '';
+  const directory = hasPackage ? 'dist' : '.';
+
+  return `# Deploys this repository to Cloudflare Pages on every push.
+# Add CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID as repository secrets:
+# https://github.com/settings/secrets/actions
+name: Deploy to Cloudflare Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      deployments: write
+    steps:
+      - uses: actions/checkout@v4
+${install}      - uses: cloudflare/wrangler-action@v4
+        with:
+          apiToken: \${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: \${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          command: pages deploy ${directory} --project-name=${projectName}
+`;
 }
 
 interface RepoInfo {
@@ -77,6 +127,19 @@ export async function publishToGitHub(
     // Jekyll would otherwise ignore files and folders that start with an
     // underscore, which is common in component-based builds.
     files['.nojekyll'] = '\n';
+  }
+
+  const cloudflareProject = options.cloudflareProject?.trim();
+  if (cloudflareProject) {
+    const safeProject = cloudflareProject
+      .toLowerCase()
+      .replace(/[^a-z0-9-]/g, '-')
+      .replace(/-+/g, '-')
+      .slice(0, 58) || 'my-site';
+    files['.github/workflows/cloudflare-pages.yml'] = cloudflareWorkflow(
+      safeProject,
+      Boolean(files['package.json']),
+    );
   }
 
   const base = `https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repoName)}`;
@@ -264,19 +327,25 @@ export async function publishToGitHub(
       }
     }
 
+    const cloudflareNote = cloudflareProject
+      ? ` A Cloudflare Pages workflow for “${cloudflareProject}” is included — add CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID as repository secrets to activate it.`
+      : '';
+
     if (pagesEnabled) {
       return {
         ok: true,
-        message: domain
-          ? `Pushed ${count} files and attached ${domain}. Pages is building — DNS can take a little while.`
-          : `Pushed ${count} files. GitHub Pages is building the site now.`,
+        message: `${
+          domain
+            ? `Pushed ${count} files and attached ${domain}. Pages is building — DNS can take a little while.`
+            : `Pushed ${count} files. GitHub Pages is building the site now.`
+        }${cloudflareNote}`,
         url: pagesUrl || repoUrl,
       };
     }
 
     return {
       ok: true,
-      message: `Pushed ${count} files to ${owner}/${repoName}. To make it live, enable Pages in the repository settings (Branch: ${branch}, folder: /).`,
+      message: `Pushed ${count} files to ${owner}/${repoName}. To make it live, enable Pages in the repository settings (Branch: ${branch}, folder: /).${cloudflareNote}`,
       url: repoUrl,
     };
   } catch (error) {

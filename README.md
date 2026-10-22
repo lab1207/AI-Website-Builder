@@ -4,10 +4,10 @@
   <img src="assets/logo.svg" width="620" alt="AI Website Builder" />
 </a>
 
-### The prompt-to-website studio that stays in your browser.
+### The source-to-website studio that stays in your browser.
 
-Describe it. Watch it become a real website. Refine it by pointing, version every move,<br />
-and publish without leaving the tab.
+Screenshot, live URL, existing code, a project file, or one sentence. It becomes a real<br />
+website you can refine in conversation — then export or publish without leaving the tab.
 
 <p>
   <a href="https://lab1207.github.io/AI-Website-Builder/"><strong>Start building →</strong></a>
@@ -29,7 +29,7 @@ and publish without leaving the tab.
 </div>
 
 <a href="https://lab1207.github.io/AI-Website-Builder/">
-  <img src="assets/screenshot-landing.webp" width="100%" alt="The AI Website Builder landing page: 'Describe it. Watch it become a real website.'" />
+  <img src="assets/screenshot-landing.webp" width="100%" alt="The AI Website Builder landing page: 'Rebuild a site from anything. Or describe your own,' with Describe, Screenshot, Link, and Code source tabs." />
 </a>
 
 <p align="center"><sub><em>The landing page, at 1440px. Open source, bring your own key, no account.</em></sub></p>
@@ -40,19 +40,18 @@ and publish without leaving the tab.
 
 Most AI site builders stop at a chat transcript. This one keeps going.
 
-You describe the site. The model returns complete files. The studio turns those files into a live, clickable preview, lets you point at the part that feels wrong, and keeps every version on the way. When it is ready, export it, push it to GitHub, deploy it to Vercel, or generate the DNS records for your own domain.
+Bring the source you already have — a screenshot, a live page, a folder of code, or a sentence. The model returns complete files, the studio turns them into a live, clickable preview, and the build trail shows every real stage while it works. You can keep talking mid-build: extra instructions queue instead of bouncing, and each finished build offers concrete next steps. Point at anything, edit the code or the design tokens, keep every version, then export it, push it to GitHub, deploy it to Vercel, or run the one-command Cloudflare deploy.
 
 > **A real website is a set of files you can click through, edit, version, export, and host anywhere.**
 > That is what this builds — not a mockup, and not a lock-in.
 
-| The build | The finish |
-| :--- | :--- |
-| Six AI provider options, including any OpenAI-compatible endpoint | ZIP of the full source, or one self-contained HTML file |
-| HTML/CSS/JS, React, Vue 3, and Next.js projects | GitHub publishing with commits and best-effort Pages setup |
-| Single-page or linked multi-page sites | One-click Vercel deployment |
-| Live preview on desktop, tablet, and phone widths | DNS records and a `CNAME` file for four hosts |
-| Point-and-edit, chat edits, code view, and asset view | Version history with line diffs and one-click restore |
-| Screenshot paste and project import | Light and dark themes, remembered locally |
+| The source | The build | The finish |
+| :--- | :--- | :--- |
+| Screenshot or image upload | Six AI provider options, including any OpenAI-compatible endpoint | ZIP of the full source, ready to host anywhere |
+| Live URL capture (screenshot + page text) | HTML/CSS/JS, React, Vue 3, and Next.js projects | GitHub publishing with commits and best-effort Pages setup |
+| Code, text, and config files | Single-page or linked multi-page sites | One-click Vercel deployment |
+| `.zip` or `.html` project import | Live preview on desktop, tablet, and phone widths | Cloudflare Pages direct-upload command, ready to run |
+| A sentence, or nothing but a name | Point-and-edit, colour and token editing, code view | DNS records and a `CNAME` file for four hosts |
 
 <a href="https://lab1207.github.io/AI-Website-Builder/">
   <img src="assets/screenshot-workspace.webp" width="100%" alt="A multi-page restaurant site in the studio: file log, Home/About/Contact preview tabs, live preview, model picker, and export controls." />
@@ -61,6 +60,16 @@ You describe the site. The model returns complete files. The studio turns those 
 <p align="center"><sub><em>A five-file, three-page project: live preview tabs, model controls, and export in one workspace.</em></sub></p>
 
 ## 02 · What a build actually includes
+
+### Faithful to the source, honest about the process
+
+When you supply a screenshot, a captured URL, existing code, or a design file, that source is ground truth: the prompt asks for the real section order, type scale, colours, spacing, imagery, and visible copy — not an approximation. A URL is captured as a screenshot plus readable page text using two small public services (`image.thum.io`, with Microlink as a fallback, and `r.jina.ai`); they see the address you enter, and a failed capture always says why instead of looping.
+
+While the model works, the build log shows the real stages — brief received, connecting to the provider, writing the site, assembling files — with live details and elapsed time. There is no fake fill-and-reset progress bar. If a key is rejected, a rate limit is hit, a response is empty, output is cut off at the token limit, or the stream goes idle, you get the exact reason in plain language. Queued instructions pause after a failure rather than hammering the provider.
+
+### Talk to it while it builds
+
+Send another instruction mid-build and it joins a visible queue instead of being rejected; the queue runs one prompt at a time when the current build finishes, and you can remove items, clear it, or pause and resume it. A finished build can offer up to three clickable next steps, and if a decision would genuinely change the whole site, the model asks before guessing.
 
 ### The whole site, not a single screen
 
@@ -82,16 +91,17 @@ Every generation is snapshotted locally, up to 30 versions. Open history to see 
 
 ### Publishing without ceremony
 
-- **Download** a ZIP with every source file, or a single HTML file with the CSS and JS inlined.
+- **Download** a ZIP with every source file and an optional `CNAME`.
 - **GitHub** creates or updates the repository, commits the complete tree, and asks Pages to serve it.
-- **Vercel** deploys the project and returns the live URL.
+- **Vercel** deploys the project with your token and returns the live URL.
+- **Cloudflare** prepares a Pages direct upload. Cloudflare's API sends no browser CORS headers, so instead of pretending a hidden request succeeded, the panel hands you the two exact `wrangler pages` commands and the direct-upload guide — and explains how to connect the repository for automatic deploys.
 - **Domain** generates the exact A, CNAME, or ALIAS records for GitHub Pages, Vercel, Netlify, or Cloudflare Pages, and writes the `CNAME` file into the project.
 
 The studio does not pretend to control your registrar. The domain sheet gives you the records; the DNS change is yours.
 
-### Import, paste, continue
+### Import, paste, capture, continue
 
-Drop in a `.zip` or a single `.html` file and keep editing it with AI. Paste a screenshot straight into the composer to use it as a visual reference. Import a Figma file with a personal token to pull its frames in as design references.
+Drop in a `.zip` or a single `.html` file and keep editing it with AI. Paste a screenshot straight into the composer, attach HTML, CSS, JS, Vue, Markdown, JSON, or SVG files, or paste a live URL to capture it as a screenshot plus page text. Import a Figma file with a personal token to pull its frames in as design references. Attachments alone are a valid prompt: send a screenshot with no words and the studio writes the rebuild instruction for you.
 
 ## 03 · Six provider options, one studio
 
@@ -108,8 +118,10 @@ Open **Settings** to add a key. The model picker then loads the list that key ca
 
 Keys are stored one per provider in this browser. Switching from Gemini to Claude and back does not lose either key.
 
+Settings also has a **Test connection** button that sends a real one-token request to the selected provider and model, so a key that can list models but has no credits is caught before a build. **Thinking mode** is on by default for models that support it, and can be switched off there.
+
 <a href="https://lab1207.github.io/AI-Website-Builder/">
-  <img src="assets/screenshot-dashboard.webp" width="100%" alt="The studio home: a large 'What will you build today?' prompt, model and stack chips, import, provider status, and four starter projects." />
+  <img src="assets/screenshot-dashboard.webp" width="100%" alt="The studio home: a large 'Rebuild it, or imagine it' prompt, plus Add, model, stack, import, provider status, and four starter projects." />
 </a>
 
 <p align="center"><sub><em>The home screen: one prompt, the stack, a provider, and four deliberately art-directed starting points.</em></sub></p>
@@ -143,7 +155,7 @@ Open the printed local URL, choose a provider in **Settings**, and paste your ow
 | :--- | :--- |
 | `npm run dev` | Vite development server with HMR |
 | `npm run typecheck` | TypeScript, no emit |
-| `npm test` | 89 unit tests across providers, keys, preview, domains, history, scaffolds, and secret scanning |
+| `npm test` | 120 unit tests across providers, error handling, reference capture, the parser, keys, preview, domains, history, scaffolds, and secret scanning |
 | `npm run build` | Typecheck, then a production build in `dist/` |
 | `npm run preview` | Serve the production build locally |
 | `npm run check` | Typecheck, test, and build in one pass |
@@ -195,11 +207,12 @@ src/
 ├─ lib/
 │  ├─ apiKey.ts       per-provider key storage and validation
 │  ├─ domains.ts      DNS guides, host records, and CNAME files
-│  ├─ generation.ts   the system prompt and the __FILE: parser
+│  ├─ generation.ts   the system prompt, the __FILE: parser, and __NEXT suggestions
 │  ├─ preview.ts      preview document, page discovery, and the navigation bridge
 │  ├─ projectTypes.ts framework scaffolds and stack instructions
-│  ├─ providers.ts    six provider adapters, model loading, and chat
+│  ├─ providers.ts    six provider adapters, model loading, chat, and connection tests
 │  ├─ publish.ts      GitHub, Vercel, and Figma APIs
+│  ├─ reference.ts    URL capture: screenshot fallback chain and page text
 │  └─ versionHistory.ts snapshots, restore, and the line diff
 ├─ services/geminiService.ts  the Gemini SDK adapter
 ├─ App.tsx
@@ -208,13 +221,13 @@ src/
 
 **Stack:** React 19, TypeScript, Vite 8, Tailwind CSS 4, and the Google Gen AI SDK. Fraunces, Manrope, and Fira Code are self-hosted. There is no component library and no icon font.
 
-**Performance:** the initial application JavaScript is about 120 kB gzipped. JSZip and the Gemini SDK are separate chunks loaded only when you import a ZIP or start a Gemini generation.
+**Performance:** the initial application JavaScript is about 140 kB gzipped. JSZip and the Gemini SDK are separate chunks loaded only when you import a ZIP or start a Gemini generation.
 
-**Testing:** 89 unit tests cover the parser, provider fallbacks, key handling, the preview bridge, page discovery, scaffolds, DNS records, line diffs, config parity, and secret scanning. `npm run check` is the same gate CI uses.
+**Testing:** 120 unit tests cover the parser and `__NEXT` suggestions, provider error handling and connection tests, the reference-capture fallback chain, key handling, the preview bridge, page discovery, scaffolds, DNS records, line diffs, config parity, and secret scanning. `npm run check` is the same gate CI uses.
 
-## 08 · Release 3.0.0
+## 08 · Release 3.1.0
 
-This is the studio release: a new warm-paper identity, a complete landing page, a rebuilt home and workspace, a searchable model picker, multi-page preview tabs, version diffs, domain guides, refreshed documentation, and a much stricter release pipeline.
+This is the source-to-site release: rebuild from a screenshot, a live URL, code, a project file, or a sentence; a real staged build trail instead of a looping animation; a visible prompt queue with pause and resume; clickable follow-up suggestions; explicit provider, rate-limit, empty-response, and token-limit errors; a settings connection test; thinking mode on by default; colour and design-token editing in the Assets panel; and a Cloudflare Pages deploy path alongside Vercel.
 
 Read the full [CHANGELOG](CHANGELOG.md).
 
@@ -223,6 +236,8 @@ Read the full [CHANGELOG](CHANGELOG.md).
 [GPL-3.0-or-later](LICENSE). You can use, study, share, and modify it; derivative distributions must remain under the same license. There is no warranty.
 
 Contributions are welcome — start with [CONTRIBUTING.md](CONTRIBUTING.md) and the [Code of Conduct](CODE_OF_CONDUCT.md).
+
+**Acknowledgements:** the source-fidelity prompting and screenshot-intake approach were informed by [abi/screenshot-to-code](https://github.com/abi/screenshot-to-code) (MIT). This project is an independent browser-only implementation and shares no code or backend with it.
 
 ---
 

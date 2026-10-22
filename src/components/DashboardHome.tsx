@@ -10,13 +10,9 @@ interface DashboardHomeProps {
   hasWork: boolean;
   input: string;
   setInput: (value: string) => void;
-  onSend: (attachments: Attachment[]) => void;
+  onSend: (attachments: Attachment[], overrideInput?: string) => void;
   isLoading: boolean;
   onStop: () => void;
-  isAnnotating: boolean;
-  setIsAnnotating: (value: boolean) => void;
-  pendingAnnotations: Array<{ x: number; y: number }>;
-  onRemoveAnnotation: (index: number) => void;
   versions: VersionSnapshot[];
   onOpenHistory: () => void;
   onContinue: () => void;
@@ -32,6 +28,10 @@ interface DashboardHomeProps {
   hasKey: boolean;
   modelPicker: React.ReactNode;
   onImportProject: () => void;
+  initialLink?: string;
+  initialAttachments?: Attachment[];
+  onInitialLinkConsumed?: () => void;
+  onInitialAttachmentsConsumed?: () => void;
 }
 
 const timeAgo = (timestamp: number): string => {
@@ -231,10 +231,6 @@ const DashboardHome: React.FC<DashboardHomeProps> = ({
   onSend,
   isLoading,
   onStop,
-  isAnnotating,
-  setIsAnnotating,
-  pendingAnnotations,
-  onRemoveAnnotation,
   versions,
   onOpenHistory,
   onContinue,
@@ -247,6 +243,10 @@ const DashboardHome: React.FC<DashboardHomeProps> = ({
   hasKey,
   modelPicker,
   onImportProject,
+  initialLink,
+  initialAttachments,
+  onInitialLinkConsumed,
+  onInitialAttachmentsConsumed,
 }) => {
   const projectTypeLabel =
     PROJECT_TYPES.find((option) => option.value === projectType)?.label ?? 'HTML, CSS & JS';
@@ -275,11 +275,12 @@ const DashboardHome: React.FC<DashboardHomeProps> = ({
           </div>
 
           <h1 className="display mt-3 text-[38px] leading-[1.02] sm:text-[54px]">
-            What will you <em>build</em> today?
+            Rebuild it, or <em>imagine</em> it.
           </h1>
-          <p className="mt-2.5 max-w-[560px] text-[13px] leading-relaxed text-ink-muted sm:text-[13.5px]">
-            Describe it, paste a screenshot, or start from a template. You get a live site,
-            editable code, saved versions, and a publish button — not a chat transcript.
+          <p className="mt-2.5 max-w-[600px] text-[13px] leading-relaxed text-ink-muted sm:text-[13.5px]">
+            Paste a screenshot, drop a live link, import a project, or describe it in one
+            sentence. The build starts immediately, shows every stage, and keeps taking your
+            follow-up instructions while it works.
           </p>
         </div>
 
@@ -317,11 +318,16 @@ const DashboardHome: React.FC<DashboardHomeProps> = ({
             onSend={onSend}
             isLoading={isLoading}
             onStop={onStop}
-            isAnnotating={isAnnotating}
-            onToggleAnnotating={setIsAnnotating}
-            pendingAnnotations={pendingAnnotations}
-            onRemoveAnnotation={onRemoveAnnotation}
+            isAnnotating={false}
+            onToggleAnnotating={() => undefined}
+            pendingAnnotations={[]}
+            onRemoveAnnotation={() => undefined}
             variant="dashboard"
+            onImportProject={onImportProject}
+            initialLink={initialLink}
+            initialAttachments={initialAttachments}
+            onInitialLinkConsumed={onInitialLinkConsumed}
+            onInitialAttachmentsConsumed={onInitialAttachmentsConsumed}
           />
 
           <div className="mt-3 flex flex-wrap items-center gap-2">

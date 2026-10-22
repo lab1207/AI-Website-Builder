@@ -186,6 +186,8 @@ export interface ChatMessage {
   attachments?: Attachment[];
 }
 
+export type ProviderStage = 'sending' | 'connected' | 'streaming' | 'done';
+
 export interface ChatRequest {
   provider: ProviderId;
   apiKey: string;
@@ -198,6 +200,16 @@ export interface ChatRequest {
   customBaseUrl?: string;
   /** Called with the full accumulated text after each chunk. */
   onChunk: (text: string) => void;
+  /** Reports real connection progress to the build log. */
+  onStage?: (stage: ProviderStage) => void;
+}
+
+export interface ConnectionTestResult {
+  ok: boolean;
+  message: string;
+  latency: number;
+  model: string;
+  sample?: string;
 }
 
 export class ProviderError extends Error {
@@ -210,6 +222,59 @@ export class ProviderError extends Error {
   }
 }
 
+const REQUEST_TIMEOUT_MS = 60_000;
+const STREAM_IDLE_TIMEOUT_MS = 90_000;
+
+/** Wraps fetch with a visible timeout instead of an endless spinner. */
+async function fetchWithTimeout(
+  url: string,
+  init: RequestInit,
+  signal?: AbortSignal,
+  timeoutMs = REQUEST_TIMEOUT_MS,
+  fetchImpl: typeof fetch = fetch,
+): Promise<Response> {
+  const controller = new AbortController();
+  let timedOut = false;
+  const onAbort = () => controller.abort();
+  if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
+  signal?.addEventListener('abort', onAbort, { once: true });
+  const timer = setTimeout(() => {
+    timedOut = true;
+    controller.abort();
+  }, timeoutMs);
+
+  try {
+    return await fetchImpl(url, { ...init, signal: controller.signal });
+  } catch (error) {
+    if (timedOut) {
+      throw new ProviderError(
+        `The provider did not respond within ${Math.round(
+          timeoutMs / 1000,
+        )} seconds. Check your connection, then try again.`,
+      );
+    }
+    throw error;
+  } finally {
+    clearTimeout(timer);
+    signal?.removeEventListener('abort', onAbort);
+  }
+}
+
+function attachmentText(message: ChatMessage): string {
+  const textFiles = (message.attachments ?? []).filter(
+    (attachment) => attachment.type === 'text',
+  );
+  if (textFiles.length === 0) return message.content;
+  const blocks = textFiles.map(
+    (attachment) =>
+      `<attached_file name="${(attachment.name ?? 'reference').replace(
+        /"/g,
+        "'",
+      )}">\n${attachment.content}\n</attached_file>`,
+  );
+  return [message.content, ...blocks].filter((part) => part.trim()).join('\n\n');
+}
+
 /** Strips a data URL down to the parts the wire formats want. */
 function splitDataUrl(dataUrl: string): { mimeType: string; data: string } {
   const match = dataUrl.match(/^data:([^;,]+);base64,(.*)$/s);
@@ -220,15 +285,83 @@ function splitDataUrl(dataUrl: string): { mimeType: string; data: string } {
 
 function humaniseStatus(status: number): string {
   const known: Record<number, string> = {
-    401: 'The API key was rejected.',
+    400: 'The provider rejected the request. Check the model name and settings.',
+    401: 'The API key was rejected. Check it in Settings.',
+    402: 'The provider says this account is out of credits. Top up the account or switch providers.',
     403: 'This key does not have access to that model.',
-    404: 'That model was not found on this account.',
-    413: 'The request was too large.',
-    429: 'Rate limit reached. Wait a moment and try again.',
+    404: 'That model or endpoint was not found on this account.',
+    408: 'The provider timed out before answering. Try again.',
+    413: 'The request was too large. Remove a reference file or use a smaller screenshot.',
+    422: 'The provider could not process that request. Try a different model.',
+    429: 'Rate limit reached. Wait a moment, then try again.',
     500: 'The provider had a server error.',
+    502: 'The provider gateway returned a bad response.',
     503: 'The provider is unavailable right now.',
+    504: 'The provider gateway timed out. Try again.',
   };
-  return known[status] ?? `Request failed (${status}).`;
+  return known[status] ?? `The provider request failed (HTTP ${status}).`;
+}
+
+/** Pulls the useful sentence out of an error body without leaking HTML. */
+function errorDetail(raw: string): string {
+  if (!raw.trim()) return '';
+  try {
+    const parsed = JSON.parse(raw) as {
+      error?: string | { message?: string; code?: string };
+      message?: string;
+      detail?: string;
+    };
+    const nested = typeof parsed.error === 'object' ? parsed.error?.message : parsed.error;
+    const detail = nested || parsed.message || parsed.detail || '';
+    if (detail) return String(detail).replace(/\s+/g, ' ').trim().slice(0, 320);
+  } catch {
+    // Not JSON; strip markup below.
+  }
+  return raw
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 320);
+}
+
+/** Builds an explicit, user-readable error from a failed HTTP response. */
+export async function providerErrorFromResponse(response: Response): Promise<ProviderError> {
+  let detail = '';
+  try {
+    detail = errorDetail(await response.text());
+  } catch {
+    // The body may already be consumed or blocked.
+  }
+  const base = humaniseStatus(response.status);
+  const retryAfter = response.headers.get('retry-after');
+  const retry =
+    response.status === 429 && retryAfter
+      ? ` Try again in about ${retryAfter} seconds.`
+      : '';
+  const message = detail && !base.toLowerCase().includes(detail.toLowerCase())
+    ? `${base}${retry} ${detail}`
+    : `${base}${retry}`;
+  return new ProviderError(message.trim(), response.status);
+}
+
+function streamErrorMessage(payload: unknown): string | null {
+  if (!payload || typeof payload !== 'object') return null;
+  const event = payload as {
+    error?: string | { message?: string; code?: string };
+    type?: string;
+    message?: string;
+  };
+  if (event.error) {
+    if (typeof event.error === 'string') return event.error;
+    return event.error.message || event.error.code || 'The provider streamed an error.';
+  }
+  if (event.type === 'error' && event.message) return event.message;
+  return null;
+}
+
+interface StreamOutcome {
+  text: string;
+  finishReason: string;
 }
 
 /**
@@ -237,70 +370,156 @@ function humaniseStatus(status: number): string {
  * Every provider here streams the same way: a framed `data:` line per chunk
  * and a terminal `data: [DONE]`. What varies is where the text hides inside
  * the JSON, so a small extractor is passed in.
+ *
+ * This is deliberately not a silent loop: provider error frames, empty
+ * responses, cut-off responses, idle streams, and aborts all become explicit
+ * errors the UI can show.
  */
 async function readSseStream(
   response: Response,
   extract: (payload: unknown) => string,
   onChunk: (text: string) => void,
   signal?: AbortSignal,
-): Promise<string> {
+): Promise<StreamOutcome> {
   if (!response.body) throw new ProviderError('The response had no body.', response.status);
 
   const reader = response.body.getReader();
   const decoder = new TextDecoder();
   const buffer = { value: '' };
   let full = '';
-  let done = false;
+  let finishReason = '';
+  let sawEvent = false;
 
-  while (!done) {
-    const { value, done: streamDone } = await reader.read();
-    if (streamDone) break;
-    if (signal?.aborted) break;
+  const readWithIdleTimeout = async () => {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const idle = new Promise<never>((_, reject) => {
+      timer = setTimeout(() => {
+        // Settle the pending read before the error propagates, so releasing
+        // the reader lock in the caller does not throw over the real reason.
+        void reader.cancel().catch(() => undefined);
+        reject(
+          new ProviderError(
+            `The provider stopped sending data for ${Math.round(
+              STREAM_IDLE_TIMEOUT_MS / 1000,
+            )} seconds. The build was stopped instead of waiting forever.`,
+          ),
+        );
+      }, STREAM_IDLE_TIMEOUT_MS);
+    });
+    try {
+      return await Promise.race([reader.read(), idle]);
+    } finally {
+      if (timer !== undefined) clearTimeout(timer);
+    }
+  };
 
-    buffer.value += decoder.decode(value, { stream: true });
-    const lines = buffer.value.split('\n');
-    buffer.value = lines.pop() ?? '';
+  try {
+    while (true) {
+      if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
+      const { value, done } = await readWithIdleTimeout();
+      if (done) break;
 
-    for (const line of lines) {
-      const trimmed = line.trim();
-      if (!trimmed.startsWith('data:')) continue;
-      const payload = trimmed.slice(5).trim();
-      if (!payload || payload === '[DONE]') continue;
+      buffer.value += decoder.decode(value, { stream: true });
+      const lines = buffer.value.split('\n');
+      buffer.value = lines.pop() ?? '';
 
-      try {
-        const text = extract(JSON.parse(payload));
+      for (const line of lines) {
+        const trimmed = line.trim();
+        if (!trimmed.startsWith('data:')) continue;
+        const payloadText = trimmed.slice(5).trim();
+        if (!payloadText || payloadText === '[DONE]') continue;
+
+        let payload: unknown;
+        try {
+          payload = JSON.parse(payloadText);
+        } catch {
+          // A malformed keep-alive frame is not worth failing the whole run.
+          continue;
+        }
+
+        const streamError = streamErrorMessage(payload);
+        if (streamError) throw new ProviderError(streamError);
+
+        const event = payload as {
+          choices?: Array<{ finish_reason?: string }>;
+          delta?: { stop_reason?: string };
+          type?: string;
+        };
+        const reason =
+          event.choices?.[0]?.finish_reason ??
+          (event.type === 'message_delta' ? event.delta?.stop_reason : undefined);
+        if (reason) finishReason = reason;
+
+        const text = extract(payload);
         if (text) {
+          sawEvent = true;
           full += text;
           onChunk(full);
         }
-      } catch {
-        // A malformed frame is a provider quirk, not worth failing the run.
       }
+    }
+  } finally {
+    try {
+      reader.releaseLock();
+    } catch {
+      // A cancelled read can still be settling; the parse result is unaffected.
     }
   }
 
-  return full;
+  if (!full.trim()) {
+    throw new ProviderError(
+      'The model finished without returning any text. This usually means the model or endpoint does not support chat completions. Choose another model and try again.',
+      response.status,
+    );
+  }
+
+  if (finishReason === 'length' || finishReason === 'max_tokens') {
+    throw new ProviderError(
+      'The response hit the output limit before it finished. Increase “Max output tokens” in Settings, or ask for the site in smaller steps.',
+      response.status,
+    );
+  }
+
+  if (finishReason === 'content_filter' || finishReason === 'refusal') {
+    throw new ProviderError(
+      'The model stopped because its safety filter rejected part of the request. Rephrase the prompt or use another provider.',
+      response.status,
+    );
+  }
+
+  if (!sawEvent) {
+    throw new ProviderError('The provider stream ended before any content arrived.', response.status);
+  }
+
+  return { text: full, finishReason };
 }
 
 /** Sends the request to any OpenAI-compatible chat endpoint. */
 async function sendOpenAiCompatible(request: ChatRequest): Promise<string> {
+  request.onStage?.('sending');
   const messages: Array<Record<string, unknown>> = [
     { role: 'system', content: request.systemInstruction },
   ];
 
   for (const message of request.messages) {
-    if (message.attachments && message.attachments.length > 0) {
-      const parts: Array<Record<string, unknown>> = [
-        ...message.attachments.map((attachment) => ({
-          type: 'image_url',
-          image_url: { url: attachment.content.startsWith('data:') ? attachment.content : `data:${attachment.mimeType};base64,${attachment.content}` },
-        })),
-      ];
-      if (message.content.trim()) parts.unshift({ type: 'text', text: message.content });
+    const text = attachmentText(message);
+    const images = (message.attachments ?? []).filter(
+      (attachment) => attachment.type === 'image',
+    );
+    if (images.length > 0) {
+      const parts: Array<Record<string, unknown>> = images.map((attachment) => ({
+        type: 'image_url',
+        image_url: {
+          url: attachment.content.startsWith('data:')
+            ? attachment.content
+            : `data:${attachment.mimeType};base64,${attachment.content}`,
+        },
+      }));
+      if (text.trim()) parts.unshift({ type: 'text', text });
       messages.push({ role: message.role, content: parts });
       continue;
     }
-    messages.push({ role: message.role, content: message.content });
+    messages.push({ role: message.role, content: text });
   }
 
   const body: Record<string, unknown> = {
@@ -316,40 +535,65 @@ async function sendOpenAiCompatible(request: ChatRequest): Promise<string> {
     if (typeof settings.maxOutputTokens === 'number') body.max_tokens = settings.maxOutputTokens;
   }
 
-  const response = await fetch(`${baseUrlFor(request.provider, request.customBaseUrl)}/chat/completions`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${request.apiKey}`,
+  const response = await fetchWithTimeout(
+    `${baseUrlFor(request.provider, request.customBaseUrl)}/chat/completions`,
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${request.apiKey}`,
+        ...(request.provider === 'openrouter'
+          ? {
+              'HTTP-Referer':
+                typeof window !== 'undefined'
+                  ? window.location.origin
+                  : 'https://github.com/lab1207/AI-Website-Builder',
+              'X-Title': 'AI Website Builder',
+            }
+          : {}),
+      },
+      body: JSON.stringify(body),
     },
-    body: JSON.stringify(body),
-    signal: request.signal,
-  });
-
-  if (!response.ok) {
-    throw new ProviderError(humaniseStatus(response.status), response.status);
-  }
-
-  return readSseStream(
-    response,
-    (payload) => {
-      const chunk = payload as { choices?: Array<{ delta?: { content?: string } }> };
-      return chunk.choices?.[0]?.delta?.content ?? '';
-    },
-    request.onChunk,
     request.signal,
   );
+
+  if (!response.ok) throw await providerErrorFromResponse(response);
+  request.onStage?.('connected');
+
+  const outcome = await readSseStream(
+    response,
+    (payload) => {
+      const chunk = payload as {
+        choices?: Array<{ delta?: { content?: string }; message?: { content?: string } }>;
+      };
+      return (
+        chunk.choices?.[0]?.delta?.content ?? chunk.choices?.[0]?.message?.content ?? ''
+      );
+    },
+    (text) => {
+      request.onStage?.('streaming');
+      request.onChunk(text);
+    },
+    request.signal,
+  );
+
+  request.onStage?.('done');
+  return outcome.text;
 }
 
 /** Sends the request to the Anthropic messages API. */
 async function sendAnthropic(request: ChatRequest): Promise<string> {
+  request.onStage?.('sending');
   const messages: Array<Record<string, unknown>> = [];
 
   for (const message of request.messages) {
     const parts: Array<Record<string, unknown>> = [];
-    if (message.content.trim()) parts.push({ type: 'text', text: message.content });
+    const text = attachmentText(message);
+    if (text.trim()) parts.push({ type: 'text', text });
 
-    for (const attachment of message.attachments ?? []) {
+    for (const attachment of (message.attachments ?? []).filter(
+      (item) => item.type === 'image',
+    )) {
       const { mimeType, data } = splitDataUrl(attachment.content);
       parts.push({
         type: 'image',
@@ -375,33 +619,41 @@ async function sendAnthropic(request: ChatRequest): Promise<string> {
     body.top_p = request.runSettings.topP;
   }
 
-  const response = await fetch(`${baseUrlFor(request.provider, request.customBaseUrl)}/v1/messages`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'x-api-key': request.apiKey,
-      'anthropic-version': '2023-06-01',
-      // Required for a browser origin to call the API directly.
-      'anthropic-dangerous-direct-browser-access': 'true',
+  const response = await fetchWithTimeout(
+    `${baseUrlFor(request.provider, request.customBaseUrl)}/v1/messages`,
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': request.apiKey,
+        'anthropic-version': '2023-06-01',
+        // Required for a browser origin to call the API directly.
+        'anthropic-dangerous-direct-browser-access': 'true',
+      },
+      body: JSON.stringify(body),
     },
-    body: JSON.stringify(body),
-    signal: request.signal,
-  });
+    request.signal,
+  );
 
-  if (!response.ok) {
-    throw new ProviderError(humaniseStatus(response.status), response.status);
-  }
+  if (!response.ok) throw await providerErrorFromResponse(response);
+  request.onStage?.('connected');
 
-  return readSseStream(
+  const outcome = await readSseStream(
     response,
     (payload) => {
       const event = payload as { type?: string; delta?: { type?: string; text?: string } };
       if (event.type !== 'content_block_delta') return '';
       return event.delta?.text ?? '';
     },
-    request.onChunk,
+    (text) => {
+      request.onStage?.('streaming');
+      request.onChunk(text);
+    },
     request.signal,
   );
+
+  request.onStage?.('done');
+  return outcome.text;
 }
 
 /**
@@ -418,23 +670,37 @@ export async function sendChat(request: ChatRequest): Promise<string> {
       `No API key for ${definition.label}. Add one in Settings to start building.`,
     );
   }
-
   if (definition.protocol === 'gemini') {
+    request.onStage?.('sending');
     const { sendMessageToGemini } = await import('../services/geminiService');
     const turns = request.messages.filter((message) => message.role === 'user');
     const last = turns.at(-1);
 
-    return sendMessageToGemini(
+    let streamed = false;
+    const text = await sendMessageToGemini(
       last?.content ?? '',
       (last?.attachments ?? []) as Attachment[],
       request.messages.slice(0, -1) as never,
-      request.onChunk,
+      (value) => {
+        if (!streamed) {
+          streamed = true;
+          request.onStage?.('streaming');
+        }
+        request.onChunk(value);
+      },
       request.systemInstruction,
       request.isThinking ?? false,
       request.runSettings,
       request.signal,
       request.apiKey,
     );
+    request.onStage?.('done');
+    if (!text.trim()) {
+      throw new ProviderError(
+        'Gemini finished without returning any text. Try another model or prompt.',
+      );
+    }
+    return text;
   }
 
   if (definition.protocol === 'anthropic') {
@@ -442,6 +708,145 @@ export async function sendChat(request: ChatRequest): Promise<string> {
   }
 
   return sendOpenAiCompatible(request);
+}
+
+/**
+ * Sends one tiny, non-streaming request to prove the key, model, and endpoint
+ * can actually generate text. A successful model list is not enough: a key can
+ * list models while having no credits, or a model can be retired for chat.
+ */
+export async function testProviderConnection(options: {
+  provider: ProviderId;
+  apiKey: string;
+  model: string;
+  customBaseUrl?: string;
+  signal?: AbortSignal;
+  fetchImpl?: typeof fetch;
+}): Promise<ConnectionTestResult> {
+  const definition = getProvider(options.provider);
+  const started = Date.now();
+  const key = options.apiKey.trim();
+
+  if (!key) {
+    return {
+      ok: false,
+      message: `Add a ${definition.label} key first.`,
+      latency: 0,
+      model: options.model,
+    };
+  }
+
+  try {
+    if (definition.protocol === 'gemini') {
+      const { GoogleGenAI } = await import('@google/genai');
+      const ai = new GoogleGenAI({ apiKey: key });
+      const result = await ai.models.generateContent({
+        model: options.model,
+        contents: 'Reply with exactly: OK',
+        config: { maxOutputTokens: 12, temperature: 0 },
+      });
+      const sample = (result.text ?? '').trim();
+      if (!sample) throw new Error('Gemini connected but returned an empty reply.');
+      return {
+        ok: true,
+        message: `${definition.label} is connected and can generate text.`,
+        latency: Date.now() - started,
+        model: options.model,
+        sample: sample.slice(0, 80),
+      };
+    }
+
+    const base = baseUrlFor(options.provider, options.customBaseUrl);
+    const fetchImpl = options.fetchImpl ?? fetch;
+    const anthropic = definition.protocol === 'anthropic';
+    const response = await fetchWithTimeout(
+      anthropic ? `${base}/v1/messages` : `${base}/chat/completions`,
+      {
+        method: 'POST',
+        headers: anthropic
+          ? {
+              'Content-Type': 'application/json',
+              'x-api-key': key,
+              'anthropic-version': '2023-06-01',
+              'anthropic-dangerous-direct-browser-access': 'true',
+            }
+          : {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${key}`,
+            },
+        body: JSON.stringify(
+          anthropic
+            ? {
+                model: options.model,
+                max_tokens: 12,
+                temperature: 0,
+                messages: [{ role: 'user', content: 'Reply with exactly: OK' }],
+              }
+            : {
+                model: options.model,
+                max_tokens: 12,
+                temperature: 0,
+                stream: false,
+                messages: [{ role: 'user', content: 'Reply with exactly: OK' }],
+              },
+        ),
+      },
+      options.signal,
+      45_000,
+      fetchImpl,
+    );
+
+    if (!response.ok) {
+      const error = await providerErrorFromResponse(response);
+      return {
+        ok: false,
+        message: error.message,
+        latency: Date.now() - started,
+        model: options.model,
+      };
+    }
+
+    const payload = (await response.json()) as {
+      choices?: Array<{ message?: { content?: string } }>;
+      content?: Array<{ type?: string; text?: string }>;
+    };
+    const sample = (
+      anthropic
+        ? (payload.content ?? [])
+            .filter((part) => part.type === 'text')
+            .map((part) => part.text ?? '')
+            .join('')
+        : payload.choices?.[0]?.message?.content ?? ''
+    ).trim();
+
+    if (!sample) {
+      return {
+        ok: false,
+        message: 'The endpoint answered, but returned no text. Check that this is a chat model.',
+        latency: Date.now() - started,
+        model: options.model,
+      };
+    }
+
+    return {
+      ok: true,
+      message: `${definition.label} is connected and can generate text.`,
+      latency: Date.now() - started,
+      model: options.model,
+      sample: sample.slice(0, 80),
+    };
+  } catch (error) {
+    const failure = error as Error;
+    return {
+      ok: false,
+      message:
+        failure.name === 'AbortError'
+          ? 'The connection test was stopped.'
+          : failure.message || `Could not reach ${definition.label}.`,
+      latency: Date.now() - started,
+      model: options.model,
+    };
+  }
 }
 
 /**

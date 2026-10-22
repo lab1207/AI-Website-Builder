@@ -16,8 +16,7 @@ async function loadGenAI() {
 }
 
 let currentChatSession: Chat | null = null;
-let currentModel: string | null = null;
-let currentApiKey: string | null = null;
+let currentSessionKey: string | null = null;
 
 export interface ModelOption {
   value: string;
@@ -116,31 +115,34 @@ function formatModelLabel(name: string): string {
 
 export const resetChat = () => {
   currentChatSession = null;
-  currentModel = null;
-  currentApiKey = null;
+  currentSessionKey = null;
 };
 
 // Helper to convert internal Message to Gemini SDK Content
 const mapMessageToContent = (msg: Message): Content => {
   const parts: Part[] = [{ text: msg.content }];
-  if (msg.attachments && msg.attachments.length > 0) {
-    msg.attachments.forEach(att => {
-      // Basic check to ensure valid base64
-      const base64Data = att.content.includes('base64,') 
-        ? att.content.split('base64,')[1] 
-        : att.content;
-        
+  (msg.attachments ?? []).forEach((att) => {
+    if (att.type === 'text') {
       parts.push({
-        inlineData: {
-          mimeType: att.mimeType,
-          data: base64Data
-        }
+        text: `<attached_file name="${att.name ?? 'reference'}">\n${att.content}\n</attached_file>`,
       });
+      return;
+    }
+    // Basic check to ensure valid base64
+    const base64Data = att.content.includes('base64,')
+      ? att.content.split('base64,')[1]
+      : att.content;
+
+    parts.push({
+      inlineData: {
+        mimeType: att.mimeType,
+        data: base64Data,
+      },
     });
-  }
+  });
   return {
     role: msg.role === 'assistant' ? 'model' : 'user',
-    parts: parts
+    parts: parts,
   };
 };
 
@@ -159,10 +161,20 @@ export const sendMessageToGemini = async (
   // 1. Determine the appropriate model
   // Use user selected model, default to 2.5 Flash if missing
   const targetModel = runSettings?.model || DEFAULT_MODEL;
-  
-  // 2. Configure the chat session
-  // We recreate the session if the model, the key, or the session changes
-  if (!currentChatSession || currentModel !== targetModel || currentApiKey !== apiKey) {
+  const sessionKey = JSON.stringify({
+    model: targetModel,
+    apiKey,
+    systemInstruction,
+    isThinking,
+    temperature: runSettings?.temperature,
+    topP: runSettings?.topP,
+    topK: runSettings?.topK,
+    maxOutputTokens: runSettings?.maxOutputTokens,
+  });
+
+  // Recreate the session when the model, key, instructions, or sampling
+  // settings change. Otherwise the SDK silently keeps using the old config.
+  if (!currentChatSession || currentSessionKey !== sessionKey) {
     if (!apiKey) {
         throw new Error(
           "No API key. Add your Gemini API key in Settings, or set VITE_GEMINI_API_KEY when you build.",
@@ -202,8 +214,7 @@ export const sendMessageToGemini = async (
       history: sdkHistory
     });
     
-    currentModel = targetModel;
-    currentApiKey = apiKey;
+    currentSessionKey = sessionKey;
   }
 
   let fullResponse = "";
@@ -214,6 +225,12 @@ export const sendMessageToGemini = async (
     if (message) parts.push({ text: message });
     
     attachments.forEach(att => {
+      if (att.type === 'text') {
+        parts.push({
+          text: `<attached_file name="${att.name ?? 'reference'}">\n${att.content}\n</attached_file>`,
+        });
+        return;
+      }
       const base64Data = att.content.includes('base64,') 
         ? att.content.split('base64,')[1] 
         : att.content;
@@ -242,7 +259,27 @@ export const sendMessageToGemini = async (
     }
   } catch (error) {
     console.error("Gemini API Error:", error);
-    throw error;
+    const raw = error instanceof Error ? error.message : String(error);
+    let detail = raw;
+    try {
+      const parsed = JSON.parse(raw) as {
+        error?: { message?: string; status?: string; code?: number };
+      };
+      if (parsed.error?.message) detail = parsed.error.message;
+    } catch {
+      // Leave the raw message.
+    }
+    if (/429|quota|rate limit/i.test(`${raw} ${detail}`)) {
+      throw new Error(
+        `Gemini rate limit reached. Wait a moment, then try again. ${detail}`.trim(),
+      );
+    }
+    if (/401|403|api key|permission/i.test(`${raw} ${detail}`)) {
+      throw new Error(
+        `Gemini rejected the API key or this model is not available to it. ${detail}`.trim(),
+      );
+    }
+    throw new Error(detail || 'Gemini could not complete the request.');
   }
 
   return fullResponse;

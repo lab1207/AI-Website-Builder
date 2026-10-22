@@ -2,6 +2,57 @@
 
 All notable changes to this project are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.1.0] - 2026-10-22
+
+### The source-to-site release
+
+Rebuild from a screenshot, a live URL, existing code, a project file, or a sentence — with a real staged build trail, a visible prompt queue, back-and-forth follow-ups, and explicit errors instead of silent loops.
+
+### Added
+
+- **Screenshot, link, code, and file intake.** The composer accepts images, text and source files (HTML, CSS, JS, JSX, TS, Vue, Markdown, JSON, YAML, SVG, and more), `.zip` and `.html` project imports, and live URLs. Drag and drop, paste, or the new Add menu all feed the same source slots.
+- **Live URL capture.** `src/lib/reference.ts` normalizes the address, renders a screenshot through image.thum.io with Microlink as a fallback, and reads the page with r.jina.ai into an attached text reference. The fallback chain reports both services and the real reason when none can render; the UI discloses which services see the URL.
+- **Attachment-only prompts.** Sending a screenshot or a file with no text writes a source-specific instruction automatically — rebuild the screenshot exactly, treat the files as the source of truth, or rebuild the captured URL.
+- **A real build trail.** Each assistant message carries staged `BuildStep`s (brief received, connecting, writing, assembling files, final check) with live details, elapsed time, and done/active/error/stopped states. The old looping fill-and-reset progress bar and rotating marketing steps are gone.
+- **Provider stage telemetry.** `sendChat` reports sending, connected, streaming, and done; the timeline reflects the true connection state rather than a timer.
+- **A visible prompt queue.** Sending while a build runs queues the message. The queue tray lists what is waiting, allows removing or clearing items, drains one prompt at a time, and pauses after an error or a manual stop with an explicit Resume.
+- **Back-and-forth follow-ups.** A finished build can end with up to three `__NEXT:` suggestions that render as clickable chips, and the prompt tells the model to ask 1–3 clarifying questions instead of guessing when a decision would change the whole site.
+- **Explicit failures.** Request timeouts, idle-stream watchdogs, provider error frames, empty responses, output-limit cut-offs, safety refusals, rate limits with `Retry-After`, out-of-credit accounts, and rejected keys all become specific messages in the build log. A failed run keeps any partial output and pauses the queue.
+- **An API connection test.** Settings sends a real one-token, non-streaming request through the selected provider and model and reports latency plus the reply, so a key that can list models but cannot generate is caught immediately.
+- **Cloudflare Pages path.** A Cloudflare tab in Publish prepares the project name, the exact `wrangler pages project create` and `wrangler pages deploy` commands with copy support, and instructions for Git-connected automatic deploys. Cloudflare's API sends no browser CORS headers, so the panel states that plainly instead of attempting a silent request.
+- **Expanded live editing.** The Assets panel now finds CSS custom properties (colour, spacing, radii, shadows) and hex colours alongside images, links, and button labels, with a colour picker and commit-on-blur editing that writes back to every file using the value.
+- **Landing-page source tabs.** Describe, Screenshot, Link, and Code tabs seed the studio directly — a prompt arrives in the composer, a screenshot arrives attached, a link is captured on arrival, and pasted code arrives as a source file.
+- **Default-on thinking mode.** Thinking is enabled by default and moved to Settings, alongside the extra-instructions field that used to live in the chat toolbar.
+
+### Changed
+
+- **The composer is a source intake.** One Add menu for images, code and text, live links, and project imports; attachment chips with thumbnails and sizes; clear-all; per-file validation for size, type, and emptiness; and a queue-aware send button that shows Build, Queue, or Stop.
+- **The chat panel is a build log.** Fake loading dots, the simulated progress bar, and decorative step rotation were replaced by the staged timeline, file cards that show streaming versus written, follow-up chips, queue visibility, and stop controls in both the composer and the top bar.
+- **The generation prompt** now covers source fidelity explicitly (inventory the reference, match proportions and copy, reproduce every section and state, rebuild responsive equivalents), requires real nested file paths, and defines the `__NEXT:` protocol.
+- **The parser** accepts nested paths, spaces, and underscores; strips `__NEXT:` from the final file; ignores empty markers; and normalizes backslashes and `./` prefixes.
+- **Settings and the chat toolbar.** Instructions and the model list leave more room for the provider, the connection test, and the thinking switch; the chat toolbar keeps only the build log and a New action.
+- **Gemini sessions** are recreated when the model, key, instructions, or sampling settings change, accept text attachments, and translate SDK failures (rate limit, rejected key) into plain language.
+- **Landing copy and illustrations** now lead with rebuilding from a source, the build trail, the queue, and deploying to your own Vercel or Cloudflare account.
+- **README, changelog, and screenshots** updated for the release; the test suite grew from 89 to 120 tests.
+
+### Fixed
+
+- **No silent loop.** A completion that produced nothing previously left the UI waiting or finished with no website; empty responses, idle streams, truncated output, and error frames now fail loudly with the reason.
+- **Queueing no longer drops instructions.** Sending during a build appends to the queue instead of being ignored, and an annotation plus a typed prompt now both survive into the request.
+- **Asset edits no longer apply per keystroke.** Values commit on blur or Enter, which stops the cursor from jumping and the project from being re-parsed on every character.
+- **Preview navigation is validated.** `awb:preview-navigate` messages must come from the preview iframe's own window and name a real page; path traversal is ignored.
+- **Downloads are not cancelled.** Object URLs are revoked after a delay instead of immediately after `click()`, in both the preview export and the publish panel.
+- **The misleading "Save code changes" export item** was replaced with "Copy rendered HTML"; code edits were already live.
+- **Landing screenshot intake** accepts several images, not just one, matching its copy.
+- **OpenRouter requests** now send the correct referer and title headers.
+- **Reference capture failures** include the last service error instead of claiming only that both were rate-limited.
+
+### Security
+
+- URL capture uses third-party rendering and reading services and says so in the composer before you enter an address.
+- Publishing tokens remain in memory only; the Cloudflare path never asks for a token it cannot use from the browser.
+- The secret scan, sandboxed preview, CSP alignment, and per-provider local key storage are unchanged and still enforced in CI.
+
 ## [3.0.0] - 2026-10-21
 
 ### The studio release
@@ -22,7 +73,7 @@ A complete redesign and rebuild of the product surface: a proper landing page, a
 - **A light-first launch experience.** A pre-paint theme script removes the dark-mode flash while preserving the saved or system preference.
 - **Mobile workspace navigation.** A drawer, bottom workspace bar, and full-width preview replace the desktop layout on small screens.
 - **Release documentation.** A rewritten README with new screenshots, provider and key guidance, privacy notes, architecture, local setup, deployment, and testing; a complete changelog for this release.
-- **Test coverage for the new logic.** Domain normalization and DNS guides, version diffs and labels, preview page discovery and navigation, framework scaffolds, and model-list fallbacks. The suite now has 89 tests.
+- **Test coverage for the new logic.** Domain normalization and DNS guides, version diffs and labels, preview page discovery and navigation, framework scaffolds, and model-list fallbacks. The suite now has 120 tests.
 
 ### Changed
 
