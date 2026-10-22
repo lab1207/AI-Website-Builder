@@ -67,8 +67,8 @@ describe('hosting configuration', () => {
     expect(csp).not.toContain("default-src *");
     expect(csp).not.toContain("script-src *");
     expect(csp).not.toContain("connect-src *");
-    // The old icon-font CDN is gone; neither the headers nor the GitHub Pages
-    // meta policy may quietly bring it back.
+    // The old icon-font CDN is gone; neither the headers nor the meta
+    // policy may quietly bring it back.
     expect(csp).not.toContain('cdnjs.cloudflare.com');
     expect(read('index.html')).not.toContain('cdnjs.cloudflare.com');
   });

@@ -18,9 +18,10 @@
     <meta name="color-scheme" content="light dark" />
 
     <!--
-      GitHub Pages cannot serve custom response headers, so the policy is also
-      declared here. Hosts that support headers send the same policy in
-      public/_headers, vercel.json, and netlify.toml.
+      The policy is sent as a response header by every host that supports
+      custom headers (public/_headers, vercel.json, netlify.toml). It is
+      mirrored here as well, so the page is still locked down when it is opened
+      straight from disk or served by a host without header support.
     -->
     <meta
       http-equiv="Content-Security-Policy"

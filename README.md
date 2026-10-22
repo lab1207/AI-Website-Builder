@@ -1,6 +1,6 @@
 <div align="center">
 
-<a href="https://lab1207.github.io/AI-Website-Builder/">
+<a href="https://ai-website-builder-7lq.pages.dev/">
   <img src="assets/logo.svg" width="620" alt="AI Website Builder" />
 </a>
 
@@ -10,7 +10,7 @@ Screenshot, live URL, existing code, a project file, or one sentence. It becomes
 website you can refine in conversation — then export or publish without leaving the tab.
 
 <p>
-  <a href="https://lab1207.github.io/AI-Website-Builder/"><strong>Start building →</strong></a>
+  <a href="https://ai-website-builder-7lq.pages.dev/"><strong>Start building →</strong></a>
   &nbsp;·&nbsp;
   <a href="CHANGELOG.md">Release notes</a>
   &nbsp;·&nbsp;
@@ -28,7 +28,7 @@ website you can refine in conversation — then export or publish without leavin
 
 </div>
 
-<a href="https://lab1207.github.io/AI-Website-Builder/">
+<a href="https://ai-website-builder-7lq.pages.dev/">
   <img src="assets/screenshot-landing.webp" width="100%" alt="The AI Website Builder landing page: 'Rebuild a site from anything. Or describe your own,' with Describe, Screenshot, Link, and Code source tabs." />
 </a>
 
@@ -53,7 +53,7 @@ Bring the source you already have — a screenshot, a live page, a folder of cod
 | `.zip` or `.html` project import | Live preview on desktop, tablet, and phone widths | Cloudflare Pages direct-upload command, ready to run |
 | A sentence, or nothing but a name | Point-and-edit, colour and token editing, code view | DNS records and a `CNAME` file for four hosts |
 
-<a href="https://lab1207.github.io/AI-Website-Builder/">
+<a href="https://ai-website-builder-7lq.pages.dev/">
   <img src="assets/screenshot-workspace.webp" width="100%" alt="A multi-page restaurant site in the studio: file log, Home/About/Contact preview tabs, live preview, model picker, and export controls." />
 </a>
 
@@ -120,7 +120,7 @@ Keys are stored one per provider in this browser. Switching from Gemini to Claud
 
 Settings also has a **Test connection** button that sends a real one-token request to the selected provider and model, so a key that can list models but has no credits is caught before a build. **Thinking mode** is on by default for models that support it, and can be switched off there.
 
-<a href="https://lab1207.github.io/AI-Website-Builder/">
+<a href="https://ai-website-builder-7lq.pages.dev/">
   <img src="assets/screenshot-dashboard.webp" width="100%" alt="The studio home: a large 'Rebuild it, or imagine it' prompt, plus Add, model, stack, import, provider status, and four starter projects." />
 </a>
 
@@ -166,7 +166,7 @@ Copy `.env.example` to `.env.local` only if you need one of these:
 
 ```bash
 # The absolute URL used for canonical, Open Graph, and Twitter tags.
-# GitHub Pages supplies this in CI. Set it for a custom domain.
+# Cloudflare Pages supplies this in CI. Set it for a custom domain.
 VITE_SITE_URL=https://your-domain.example
 
 # Optional fallback for private deployments only.
@@ -178,12 +178,27 @@ VITE_GEMINI_API_KEY=
 
 `npm run build` produces a static `dist/` folder. The repository ships with:
 
-- a GitHub Pages workflow that builds, tests, uploads, and deploys on every push to `main`;
+- a Cloudflare Pages workflow that builds, tests, and deploys on every push to `main`;
 - `netlify.toml` for Netlify;
 - `vercel.json` for Vercel;
 - `public/_headers` with the same CSP and security headers used by the header configs.
 
-The social image and canonical URL are filled from `VITE_SITE_URL` at build time. `vite.config.ts` also detects Vercel, Netlify, Cloudflare Pages, and GitHub Pages URLs automatically.
+The social image and canonical URL are filled from `VITE_SITE_URL` at build time. `vite.config.ts` also detects Vercel, Netlify, and Cloudflare Pages URLs automatically, and falls back to `https://ai-website-builder-7lq.pages.dev`.
+
+### Deploy to Cloudflare Pages
+
+The live studio is <https://ai-website-builder-7lq.pages.dev/>. The Cloudflare Pages project is named `ai-website-builder` and serves the `ai-website-builder-7lq.pages.dev` domain.
+
+1. In the Cloudflare dashboard open **Workers & Pages → ai-website-builder → Settings → Builds**.
+2. Set **Git repository** to `lab1207/AI-Website-Builder`, production branch `main`, build command `npm run build`, output directory `dist`, root directory blank. If the panel warns that the project is disconnected from your Git account, reinstall the "Cloudflare Workers and Pages" GitHub App and reconnect it.
+3. Set `VITE_SITE_URL` to `https://ai-website-builder-7lq.pages.dev` under **Settings → Environment variables → Production**, so the canonical and social tags are deterministic. Point it at your custom domain instead if you attach one.
+4. Deploy. Every push to `main` now builds and publishes automatically.
+
+The v3 build image ships Node.js 22.16.0 and `.nvmrc` pins the major version to `22`, so no `NODE_VERSION` override is needed.
+
+`public/_headers` is copied to `dist/_headers` and applies the CSP, security headers, and caching rules on Cloudflare Pages.
+
+`.github/workflows/deploy-cloudflare.yml` is a CI alternative that deploys with Wrangler instead. It is off by default; turn it on by setting the repository variable `CLOUDFLARE_PAGES_DEPLOY` to `true` and adding the `CLOUDFLARE_API_TOKEN` (Cloudflare Pages: Edit) and `CLOUDFLARE_ACCOUNT_ID` secrets. Use one path or the other, not both.
 
 ## 06 · Privacy and security, plainly
 
@@ -192,7 +207,7 @@ The social image and canonical URL are filled from `VITE_SITE_URL` at build time
 - **Generated code is isolated.** The preview runs in a sandboxed iframe without `allow-same-origin`. It cannot reach the studio's window, storage, or keys. A tiny storage shim keeps generated sites that use `localStorage` working.
 - **No key is committed.** A test scans the tracked tree for provider-key shapes on every CI run, and the repository includes a `SECURITY.md` with the reporting process.
 - **No third-party scripts in the studio.** Fonts and icons ship with the app. The only network calls at runtime are the ones your keys and actions trigger: model listing, generation, and publishing. External images in a generated preview are the generated site's own choice.
-- **A tight Content-Security-Policy** is sent by every supported host and mirrored in a meta tag for GitHub Pages, which cannot set custom headers.
+- **A tight Content-Security-Policy** is sent by every supported host as a response header, and mirrored in a meta tag so the page stays locked down even on a host that cannot set custom headers.
 
 Read [SECURITY.md](SECURITY.md) for the full policy.
 

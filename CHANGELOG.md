@@ -2,6 +2,20 @@
 
 All notable changes to this project are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Removed
+
+- GitHub Pages hosting for the studio itself. The Pages workflow and every reference to it are gone from the repository and the docs. GitHub Pages remains a publish target inside the app, where it belongs.
+
+### Added
+
+- A Cloudflare Pages deployment workflow (`.github/workflows/deploy-cloudflare.yml`) that tests, builds, and publishes on every push to `main`. It is off by default and is enabled with the `CLOUDFLARE_PAGES_DEPLOY` repository variable.
+
+### Fixed
+
+- Canonical, Open Graph, and Twitter URLs now point at the stable `https://ai-website-builder-7lq.pages.dev` address instead of a throwaway Cloudflare preview subdomain.
+
 ## [3.1.0] - 2026-10-22
 
 ### The source-to-site release

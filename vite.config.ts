@@ -6,8 +6,8 @@ import tailwindcss from '@tailwindcss/vite';
 
 /**
  * Fills the %SITE_URL% placeholders in index.html with the deployment URL.
- * Vercel, Netlify, Cloudflare Pages, and GitHub Pages all expose it, so the
- * canonical and social tags are correct without any manual setup.
+ * Vercel, Netlify, and Cloudflare Pages all expose it, so the canonical and
+ * social tags are correct without any manual setup.
  */
 const siteUrlPlugin = (siteUrl: string) => ({
   name: 'site-url',
@@ -15,6 +15,31 @@ const siteUrlPlugin = (siteUrl: string) => ({
     return html.replaceAll('%SITE_URL%', siteUrl);
   },
 });
+
+/**
+ * The canonical home of this project. Cloudflare Pages serves it at
+ * ai-website-builder-7lq.pages.dev. Override with VITE_SITE_URL for a custom
+ * domain.
+ */
+const DEFAULT_SITE_URL = 'https://ai-website-builder-7lq.pages.dev';
+
+/**
+ * Cloudflare preview deployments are served from https://<hash>.<project>.pages.dev.
+ * Strip the hash label so canonical and social URLs always name the stable
+ * production address instead of a throwaway preview subdomain.
+ */
+function productionUrl(url: string): string {
+  try {
+    const parsed = new URL(url);
+    const labels = parsed.hostname.split('.');
+    if (parsed.hostname.endsWith('.pages.dev') && labels.length > 3) {
+      parsed.hostname = labels.slice(1).join('.');
+    }
+    return parsed.toString().replace(/\/+$/, '');
+  } catch {
+    return url.replace(/\/+$/, '');
+  }
+}
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '');
@@ -29,12 +54,12 @@ export default defineConfig(({ mode }) => {
       ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`
       : process.env.VERCEL_URL
         ? `https://${process.env.VERCEL_URL}`
-        : process.env.URL || process.env.CF_PAGES_URL || '';
-  const siteUrl = (env.VITE_SITE_URL || inferredUrl).replace(/\/+$/, '');
+        : process.env.URL || productionUrl(process.env.CF_PAGES_URL ?? '');
+  const siteUrl = (env.VITE_SITE_URL || inferredUrl || DEFAULT_SITE_URL).replace(/\/+$/, '');
 
   return {
     base: './',
-    plugins: [react(), tailwindcss(), siteUrlPlugin(siteUrl || '.')],
+    plugins: [react(), tailwindcss(), siteUrlPlugin(siteUrl)],
     define: {
       __BUILD_TIME_API_KEY__: JSON.stringify(buildTimeKey),
     },
