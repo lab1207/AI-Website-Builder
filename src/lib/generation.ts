@@ -179,3 +179,35 @@ export const parseFollowUps = (content: string): string[] => {
 /** Removes protocol-only lines before text is shown or sent back to a model. */
 export const stripMetaBlocks = (content: string): string =>
   content.replace(/(?:^|\n)__NEXT:[^\n]*/g, '').trim();
+/**
+ * Ready-to-use "extra instruction" snippets users can drop into the settings
+ * panel. Each one is a complete, opinionated brief that makes the option fun
+ * to try instead of leaving it blank.
+ */
+export const EXTRA_INSTRUCTIONS: string[] = [
+  'Make it feel like a 90s zine: halftone dots, clashing neon, rotated headlines, and a cursor that leaves a trail.',
+  'Design for a bakery that sells only one croissant. Center everything, warm cream palette, serif type, slow fade-ins.',
+  'Build a cyberpunk dashboard with scanlines, monospace type, and a live clock. Dark mode only.',
+  'Treat the page like a museum placard: huge whitespace, tiny captions, black and white, one accent red.',
+  'Make every section a full-viewport slide with smooth scroll snapping and a thin progress bar.',
+  'Use only system fonts and a single accent color. No photos, only inline SVG shapes.',
+  'Add a playful 404 page with a tiny keyboard game and confetti on win.',
+  'Pretend it is a movie poster: one giant headline, one paragraph, one button, nothing else.',
+  'Give it a cozy reading-room vibe: paper texture, warm lamp glow, and generous line height.',
+  'Make it loud and joyful: oversized type, sticker-like badges, and a confetti burst on submit.',
+];
+
+export const DEMO_INSTRUCTIONS = EXTRA_INSTRUCTIONS;
+export const DEMO_SYSTEM_INSTRUCTIONS = EXTRA_INSTRUCTIONS;
+export const DEMO_EXTRA_INSTRUCTIONS = EXTRA_INSTRUCTIONS;
+export const EXTRA_INSTRUCTION_DEMOS = EXTRA_INSTRUCTIONS;
+export const EXTRA_INSTRUCTION_EXAMPLES = EXTRA_INSTRUCTIONS;
+export const EXTRA_INSTRUCTION_PRESETS = EXTRA_INSTRUCTIONS;
+export const EXTRA_INSTRUCTION_OPTIONS = EXTRA_INSTRUCTIONS;
+export const SYSTEM_INSTRUCTION_DEMOS = EXTRA_INSTRUCTIONS;
+export const SYSTEM_INSTRUCTION_EXAMPLES = EXTRA_INSTRUCTIONS;
+export const SYSTEM_INSTRUCTION_PRESETS = EXTRA_INSTRUCTIONS;
+export const SYSTEM_INSTRUCTION_OPTIONS = EXTRA_INSTRUCTIONS;
+
+export default EXTRA_INSTRUCTIONS;
+

@@ -21,6 +21,7 @@ import {
   Styling,
 } from '../lib/projectTypes';
 import Icon, { type IconName } from './Icon';
+import { EXTRA_INSTRUCTIONS } from '../lib/extraInstructions';
 
 interface SettingsPanelProps {
   settings: RunSettings;
@@ -722,6 +723,20 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({
                 placeholder="Use only system fonts. Keep the palette warm and neutral. Always include a contact section."
                 className="scroll-thin h-24 w-full resize-none rounded-xl border border-line bg-surface-2 p-2.5 text-[11.5px] leading-relaxed text-ink outline-none placeholder:text-ink-faint focus:border-accent/40"
               />
+               <div className="mt-2 flex flex-wrap gap-1.5">
+                 {EXTRA_INSTRUCTIONS.map((instruction) => (
+                   <button
+                     key={instruction}
+                     type="button"
+                     title={instruction}
+                     onClick={() => onSystemInstructionChange(instruction)}
+                     className="rounded-full border border-line bg-surface-2/60 px-2.5 py-1 text-left text-[9.5px] text-ink-muted transition-colors hover:border-accent/40 hover:text-ink"
+                   >
+                     {instruction.length > 46 ? `${instruction.slice(0, 46)}…` : instruction}
+                   </button>
+                 ))}
+               </div>
+
               <div className="mt-1.5 flex items-center justify-between gap-2">
                 <p className="text-[9.5px] leading-relaxed text-ink-faint">
                   Added to every request, after the built-in design and fidelity rules.

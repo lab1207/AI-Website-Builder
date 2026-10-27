@@ -371,3 +371,5 @@ export function scaffoldFor(type: ProjectType, styling: Styling = 'vanilla'): Fi
       return {};
   }
 }
+export * from './generation';
+
